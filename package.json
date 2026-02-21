@@ -1,14 +1,47 @@
 {
   "name": "agentic-gatekeeper",
   "displayName": "agentic-gatekeeper",
-  "description": "A VS Code extension to validate and apply Markdown instructions to staged code via an AI Agent.",
-  "version": "0.1.3",
+  "description": "The Ultimate Autonomous Pre-Commit Hook. Validates, auto-patches, and enforces Markdown rules on staged code using powerful AI Agents like Claude 4.6, DeepSeek V4, OpenAI GPT-5.3-Codex, Grok 4, and Local LLMs.",
+  "version": "1.0.0",
   "publisher": "revanth",
+  "author": "Revanth Pobala",
+  "license": "SEE LICENSE IN LICENSE.txt",
+  "keywords": [
+    "ai",
+    "agent",
+    "vscode",
+    "github",
+    "agentic",
+    "llm",
+    "copilot",
+    "cursor",
+    "windsurf",
+    "claude-4",
+    "claude-4.5-sonnet",
+    "claude-4.6-opus",
+    "gemini-3",
+    "gemini-3-pro",
+    "gemini-flash",
+    "gpt-5",
+    "gpt-5.3-codex",
+    "deepseek-v4",
+    "gemini-3",
+    "grok-4",
+    "llama-4",
+    "code review",
+    "linter",
+    "pre-commit",
+    "autonomous"
+  ],
   "icon": "resources/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/revanth/agentic-gatekeeper.git"
+    "url": "https://github.com/revanthpobala/agentic-gatekeeper.git"
   },
+  "homepage": "https://github.com/revanthpobala/agentic-gatekeeper",
+  "bugs": "https://github.com/revanthpobala/agentic-gatekeeper/issues",
+  "galleryColor": "#2d343c",
+  "galleryTheme": "dark",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -24,11 +57,18 @@
       {
         "command": "agentic-gatekeeper.analyzeStaged",
         "title": "Agentic Gatekeeper: Analyze Staged Changes",
-        "icon": "$(hubot)"
+        "icon": {
+          "light": "resources/scm-icon.svg",
+          "dark": "resources/scm-icon-dark.svg"
+        }
       },
       {
         "command": "agentic-gatekeeper.configureApiKey",
         "title": "Agentic Gatekeeper: Configure API Key"
+      },
+      {
+        "command": "agentic-gatekeeper.setupInstructions",
+        "title": "Agentic Gatekeeper: Create Agentic Rules Folder"
       }
     ],
     "menus": {
@@ -56,67 +96,91 @@
           "default": "Native IDE",
           "description": "Select the primary AI provider to use for gatekeeping."
         },
-        "agenticGatekeeper.geminiApiKey": {
+        "agenticGatekeeper.concurrencyMode": {
+          "type": "string",
+          "enum": [
+            "Sequential",
+            "Concurrent"
+          ],
+          "default": "Concurrent",
+          "description": "Sequential (Safe) processes files one-by-one to avoid API rate limits. Concurrent (Fast) processes all files simultaneously."
+        },
+        "agenticGatekeeper.maxConcurrentRequests": {
+          "type": "number",
+          "default": 5,
+          "description": "Maximum number of parallel AI requests to run when Concurrency Mode is enabled. Prevents API rate limiting and excessive thread spawning."
+        },
+        "agenticGatekeeper.dryRun": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, Gatekeeper will run the analysis and show output, but will NOT modify or overwrite any files."
+        },
+        "agenticGatekeeper.native.modelSelector": {
+          "type": "string",
+          "default": "",
+          "description": "Type the ID or family of the Native IDE model you want to use (e.g., 'gpt-4o', 'claude-haiku-4.5'). Leave blank to auto-select the first available."
+        },
+        "agenticGatekeeper.gemini.apiKey": {
           "type": "string",
           "default": "",
           "description": "Your Google Gemini API Key."
         },
-        "agenticGatekeeper.geminiModel": {
+        "agenticGatekeeper.gemini.model": {
           "type": "string",
           "default": "gemini-2.5-flash",
           "description": "The Gemini model to use."
         },
-        "agenticGatekeeper.openaiApiKey": {
+        "agenticGatekeeper.openai.apiKey": {
           "type": "string",
           "default": "",
           "description": "Your OpenAI API Key."
         },
-        "agenticGatekeeper.openaiModel": {
+        "agenticGatekeeper.openai.model": {
           "type": "string",
           "default": "gpt-4o",
           "description": "The OpenAI model to use."
         },
-        "agenticGatekeeper.anthropicApiKey": {
+        "agenticGatekeeper.anthropic.apiKey": {
           "type": "string",
           "default": "",
           "description": "Your Anthropic API Key (for Claude models)."
         },
-        "agenticGatekeeper.anthropicModel": {
+        "agenticGatekeeper.anthropic.model": {
           "type": "string",
           "default": "claude-3-7-sonnet-20250219",
           "description": "The Anthropic model to use."
         },
-        "agenticGatekeeper.openRouterApiKey": {
+        "agenticGatekeeper.openRouter.apiKey": {
           "type": "string",
           "default": "",
           "description": "Your OpenRouter API Key (for DeepSeek, Meta, etc.)."
         },
-        "agenticGatekeeper.openRouterModel": {
+        "agenticGatekeeper.openRouter.model": {
           "type": "string",
           "default": "deepseek/deepseek-coder",
           "description": "The OpenRouter model string (e.g., 'deepseek/deepseek-chat', 'anthropic/claude-3-haiku')."
         },
-        "agenticGatekeeper.openRouterReferer": {
+        "agenticGatekeeper.openRouter.referer": {
           "type": "string",
           "default": "https://github.com/yourusername/yourproject",
           "description": "Optional: Your app URL (HTTP-Referer) for OpenRouter rankings."
         },
-        "agenticGatekeeper.openRouterTitle": {
+        "agenticGatekeeper.openRouter.title": {
           "type": "string",
           "default": "Agentic Gatekeeper Client",
           "description": "Optional: Your app title (X-Title) for OpenRouter rankings."
         },
-        "agenticGatekeeper.customBaseUrl": {
+        "agenticGatekeeper.custom.baseUrl": {
           "type": "string",
           "default": "http://localhost:11434/v1",
           "description": "The Base URL for a custom OpenAI-compatible API (e.g., Ollama, LM Studio)."
         },
-        "agenticGatekeeper.customModel": {
+        "agenticGatekeeper.custom.model": {
           "type": "string",
           "default": "llama3",
           "description": "The Model ID for your custom API."
         },
-        "agenticGatekeeper.customApiKey": {
+        "agenticGatekeeper.custom.apiKey": {
           "type": "string",
           "default": "lm-studio",
           "description": "The API Key for your custom API (often 'lm-studio' or 'ollama' for local servers)."

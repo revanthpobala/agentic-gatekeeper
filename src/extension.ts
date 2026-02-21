@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
 import { GatekeeperEngine } from './engine/GatekeeperEngine';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -24,7 +26,31 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.executeCommand('workbench.action.openSettings', 'agenticGatekeeper');
 	});
 
-	context.subscriptions.push(disposable, configDisposable);
+	const setupDisposable = vscode.commands.registerCommand('agentic-gatekeeper.setupInstructions', async () => {
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		if (!workspaceFolders) {
+			vscode.window.showErrorMessage('Agentic Gatekeeper requires an open workspace.');
+			return;
+		}
+
+		const rootPath = workspaceFolders[0].uri.fsPath;
+		const gatekeeperDir = path.join(rootPath, '.gatekeeper');
+		const rulesFilePath = path.join(gatekeeperDir, 'global-rules.md');
+
+		if (!fs.existsSync(gatekeeperDir)) {
+			fs.mkdirSync(gatekeeperDir, { recursive: true });
+		}
+
+		if (!fs.existsSync(rulesFilePath)) {
+			const template = `# Global Rules\n\nWrite your instructions here. For example:\n\n1. Always use strict types.\n2. Never use \`any\`.\n3. Add JSDoc comments to all exported functions.\n`;
+			fs.writeFileSync(rulesFilePath, template, 'utf8');
+		}
+
+		const document = await vscode.workspace.openTextDocument(rulesFilePath);
+		await vscode.window.showTextDocument(document);
+	});
+
+	context.subscriptions.push(disposable, configDisposable, setupDisposable);
 }
 
 export function deactivate() { }

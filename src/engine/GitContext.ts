@@ -1,6 +1,6 @@
 import { simpleGit, SimpleGit } from 'simple-git';
 import * as vscode from 'vscode';
-import * as path from 'path';
+
 
 export class GitContext {
     private git: SimpleGit;
@@ -19,6 +19,20 @@ export class GitContext {
         } catch (error) {
             console.error('Failed to get staged files:', error);
             vscode.window.showErrorMessage('Agentic Gatekeeper: Failed to read Git status.');
+            return [];
+        }
+    }
+
+    /**
+     * Gets a list of modified or UNTRACKED (new) files.
+     */
+    public async getModifiedFiles(): Promise<string[]> {
+        try {
+            const status = await this.git.status();
+            // Combine tracked modifications with completely untracked new files
+            return [...status.modified, ...status.not_added];
+        } catch (error) {
+            console.error('Failed to get modified or untracked files:', error);
             return [];
         }
     }

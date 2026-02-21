@@ -9,7 +9,7 @@ export class AIAgent {
 
   private buildSystemPrompt(instructions: string): string {
     return `You are the 'Agentic Gatekeeper', a strict automated code reviewer and mutator acting as a pre-commit hook.
-Your job is to read the provided PROJECT INSTRUCTIONS and apply them rigidly to the STAGED FILES provided by the user.
+Your job is to read the provided PROJECT INSTRUCTIONS and apply them rigidly to the SINGLE STAGED FILE provided by the user.
 
 CRITICAL INSTRUCTION APPLICATION RULES:
 1. Two-Tier Verification: Instructions are categorized into GLOBAL and DIRECTORY-SPECIFIC.

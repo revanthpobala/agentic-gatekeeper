@@ -3,6 +3,7 @@ import { IProvider } from './IProvider';
 
 export class NativeIDEProvider implements IProvider {
     private outputChannel: vscode.OutputChannel | undefined;
+    private cachedModelPromise: Promise<vscode.LanguageModelChat | null> | null = null;
 
     constructor(outputChannel?: vscode.OutputChannel) {
         this.outputChannel = outputChannel;
@@ -12,31 +13,61 @@ export class NativeIDEProvider implements IProvider {
         this.outputChannel?.appendLine(`[NativeLM] ${msg}`);
     }
 
+    private async getModelInfo(): Promise<vscode.LanguageModelChat | null> {
+        if (!this.cachedModelPromise) {
+            this.cachedModelPromise = (async () => {
+                this.log('Querying available language models...');
+                const models = await vscode.lm.selectChatModels({});
+
+                if (models.length === 0) {
+                    const errMsg = 'No built-in language models found. Ensure Copilot, Gemini, or another LM provider is enabled.';
+                    this.log(`ERROR: ${errMsg}`);
+                    vscode.window.showErrorMessage(`Agentic Gatekeeper: ${errMsg}`);
+                    return null;
+                }
+
+                this.log(`Found ${models.length} model(s):`);
+                for (const m of models) {
+                    this.log(`  - ${m.id} (family: ${m.family}, vendor: ${m.vendor})`);
+                }
+
+                const config = vscode.workspace.getConfiguration('agenticGatekeeper');
+                const selector = config.get<string>('native.modelSelector')?.trim().toLowerCase();
+
+                let chatModel = models[0]; // fallback default
+
+                if (selector) {
+                    const targetModel = models.find(m =>
+                        m.id.toLowerCase().includes(selector) ||
+                        m.family.toLowerCase().includes(selector)
+                    );
+
+                    if (targetModel) {
+                        chatModel = targetModel;
+                        this.log(`User preferred model '${selector}' matched with: ${chatModel.id}`);
+                    } else {
+                        this.log(`WARNING: User preferred model '${selector}' was not found. Falling back to default.`);
+                    }
+                }
+
+                this.log(`Using model: ${chatModel.id}`);
+                return chatModel;
+            })();
+        }
+        return this.cachedModelPromise;
+    }
+
     public async execute(systemPrompt: string, userPrompt: string): Promise<string | null> {
         try {
-            this.log('Querying available language models...');
-            const models = await vscode.lm.selectChatModels({});
-
-            if (models.length === 0) {
-                const errMsg = 'No built-in language models found. Ensure Copilot, Gemini, or another LM provider is enabled.';
-                this.log(`ERROR: ${errMsg}`);
-                vscode.window.showErrorMessage(`Agentic Gatekeeper: ${errMsg}`);
-                return null;
-            }
-
-            this.log(`Found ${models.length} model(s):`);
-            for (const m of models) {
-                this.log(`  - ${m.id} (family: ${m.family}, vendor: ${m.vendor})`);
-            }
-
-            const chatModel = models[0];
-            this.log(`Using model: ${chatModel.id}`);
+            const chatModel = await this.getModelInfo();
+            if (!chatModel) return null;
 
             const messages = [
                 vscode.LanguageModelChatMessage.User(`System Instruction:\n${systemPrompt}\n\nUser Request:\n${userPrompt}`)
             ];
 
-            this.log('Sending request to language model...');
+            // Only log the actual API request explicitly, removing the spam
+            // this.log('Sending request to language model...');
             const chatResponse = await chatModel.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
 
             let fullResponse = '';
