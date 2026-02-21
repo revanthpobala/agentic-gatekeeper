@@ -4,3 +4,16 @@ node_modules
 .vscode-test/
 *.vsix
 .vscode/
+
+# MacOS
+.DS_Store
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
