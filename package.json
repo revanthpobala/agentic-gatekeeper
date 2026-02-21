@@ -3,7 +3,7 @@
   "displayName": "agentic-gatekeeper",
   "description": "The Ultimate Autonomous Pre-Commit Hook. Validates, auto-patches, and enforces Markdown rules on staged code using powerful AI Agents like Claude 4.6, DeepSeek V4, OpenAI GPT-5.3-Codex, Grok 4, and Local LLMs.",
   "version": "1.0.0",
-  "publisher": "revanth",
+  "publisher": "revanthpobala",
   "author": "Revanth Pobala",
   "license": "SEE LICENSE IN LICENSE.txt",
   "keywords": [
