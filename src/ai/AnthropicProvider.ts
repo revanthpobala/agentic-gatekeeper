@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { IProvider } from './IProvider';
+import { IProvider, ProviderResult } from './IProvider';
 
 export class AnthropicProvider implements IProvider {
     private apiKey: string;
@@ -16,8 +16,8 @@ export class AnthropicProvider implements IProvider {
         }
     }
 
-    public async execute(systemPrompt: string, userPrompt: string): Promise<string | null> {
-        if (!this.apiKey) {return null;}
+    public async execute(systemPrompt: string, userPrompt: string): Promise<ProviderResult> {
+        if (!this.apiKey) { return { content: null, usage: null, model: this.model }; }
 
         try {
             const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -46,15 +46,23 @@ export class AnthropicProvider implements IProvider {
             const data = await response.json() as any;
 
             // Extract text from the first content block
-            if (data && data.content && data.content.length > 0) {
-                return data.content[0].text || null;
-            }
-            return null;
+            const content = (data && data.content && data.content.length > 0)
+                ? data.content[0].text || null
+                : null;
+
+            // Anthropic returns usage as input_tokens / output_tokens
+            const usage = data.usage ? {
+                promptTokens: data.usage.input_tokens,
+                completionTokens: data.usage.output_tokens,
+                totalTokens: (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0),
+            } : null;
+
+            return { content, usage, model: this.model };
 
         } catch (error: any) {
             console.error('Anthropic API request failed:', error);
             vscode.window.showErrorMessage(`Agentic Gatekeeper: Anthropic Provider Error - ${error.message}`);
-            return null;
+            return { content: null, usage: null, model: this.model };
         }
     }
 }

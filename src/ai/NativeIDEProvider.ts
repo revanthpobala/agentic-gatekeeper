@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { IProvider } from './IProvider';
+import { IProvider, ProviderResult } from './IProvider';
 
 export class NativeIDEProvider implements IProvider {
     private outputChannel: vscode.OutputChannel | undefined;
@@ -57,17 +57,15 @@ export class NativeIDEProvider implements IProvider {
         return this.cachedModelPromise;
     }
 
-    public async execute(systemPrompt: string, userPrompt: string): Promise<string | null> {
+    public async execute(systemPrompt: string, userPrompt: string): Promise<ProviderResult> {
         try {
             const chatModel = await this.getModelInfo();
-            if (!chatModel) return null;
+            if (!chatModel) { return { content: null, usage: null, model: 'native-ide' }; }
 
             const messages = [
                 vscode.LanguageModelChatMessage.User(`System Instruction:\n${systemPrompt}\n\nUser Request:\n${userPrompt}`)
             ];
 
-            // Only log the actual API request explicitly, removing the spam
-            // this.log('Sending request to language model...');
             const chatResponse = await chatModel.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
 
             let fullResponse = '';
@@ -81,7 +79,8 @@ export class NativeIDEProvider implements IProvider {
                 this.log('WARNING: Model returned an empty string response.');
             }
 
-            return fullResponse || null;
+            // Native IDE API does not expose token usage
+            return { content: fullResponse || null, usage: null, model: chatModel.id };
 
         } catch (error: any) {
             const errMsg = error?.message || String(error);
@@ -93,7 +92,7 @@ export class NativeIDEProvider implements IProvider {
             }
 
             vscode.window.showErrorMessage(`Agentic Gatekeeper: Native AI Error - ${errMsg}`);
-            return null;
+            return { content: null, usage: null, model: 'native-ide' };
         }
     }
 }

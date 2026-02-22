@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { AIAgent } from '../../ai/AIAgent';
-import { IProvider } from '../../ai/IProvider';
+import { IProvider, ProviderResult } from '../../ai/IProvider';
 
 suite('AIAgent Integration Test Suite', () => {
 
@@ -24,15 +24,17 @@ suite('AIAgent Integration Test Suite', () => {
 
         // Create a fake AI Provider that always says COMPLIANT
         const mockProvider: IProvider = {
-            execute: async (systemPrompt: string, userPrompt: string) => {
-                return "   COMPLIANT   "; // Should handle whitespace
+            execute: async (systemPrompt: string, userPrompt: string): Promise<ProviderResult> => {
+                return { content: "   COMPLIANT   ", usage: { promptTokens: 100, completionTokens: 5, totalTokens: 105 }, model: 'mock-model' };
             }
         };
 
         const mockFile = [{ filePath: 'sample-math.ts', content: 'export function add(a,b){return a+b;}' }];
         const result = await agent.analyze("Rules", mockFile, mockProvider);
 
-        assert.strictEqual(result?.trim(), "COMPLIANT");
+        assert.strictEqual(result.content?.trim(), "COMPLIANT");
+        assert.strictEqual(result.usage?.totalTokens, 105);
+        assert.strictEqual(result.model, 'mock-model');
     });
 
     test('analyze method handles mutation payloads', async () => {
@@ -41,8 +43,12 @@ suite('AIAgent Integration Test Suite', () => {
         // Create a fake AI Provider that returns a JSON mutation block
         const expectedMutation = "[\n  {\n    \"filePath\": \"sample-math.ts\",\n    \"newContent\": \"// Fixed code\"\n  }\n]";
         const mockProvider: IProvider = {
-            execute: async (systemPrompt: string, userPrompt: string) => {
-                return `Here is your code: \n\n\`\`\`json\n${expectedMutation}\n\`\`\``;
+            execute: async (systemPrompt: string, userPrompt: string): Promise<ProviderResult> => {
+                return {
+                    content: `Here is your code: \n\n\`\`\`json\n${expectedMutation}\n\`\`\``,
+                    usage: { promptTokens: 500, completionTokens: 120, totalTokens: 620 },
+                    model: 'mock-model'
+                };
             }
         };
 
@@ -50,6 +56,23 @@ suite('AIAgent Integration Test Suite', () => {
         const result = await agent.analyze("Require JSDoc", mockFile, mockProvider);
 
         // Extracting just ensures that the agent successfully passed data from the provider
-        assert.ok(result?.includes(expectedMutation));
+        assert.ok(result.content?.includes(expectedMutation));
+        assert.strictEqual(result.usage?.promptTokens, 500);
+    });
+
+    test('analyze method returns usage null when provider does not report it', async () => {
+        const agent = new AIAgent();
+
+        const mockProvider: IProvider = {
+            execute: async (): Promise<ProviderResult> => {
+                return { content: "COMPLIANT", usage: null, model: 'native-ide' };
+            }
+        };
+
+        const mockFile = [{ filePath: 'test.ts', content: 'const x = 1;' }];
+        const result = await agent.analyze("Rules", mockFile, mockProvider);
+
+        assert.strictEqual(result.content, "COMPLIANT");
+        assert.strictEqual(result.usage, null);
     });
 });

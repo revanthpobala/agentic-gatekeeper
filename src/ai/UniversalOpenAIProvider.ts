@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import OpenAI from 'openai';
-import { IProvider } from './IProvider';
+import { IProvider, ProviderResult } from './IProvider';
 
 export class UniversalOpenAIProvider implements IProvider {
     private openai: OpenAI;
@@ -18,7 +18,7 @@ export class UniversalOpenAIProvider implements IProvider {
         });
     }
 
-    public async execute(systemPrompt: string, userPrompt: string): Promise<string | null> {
+    public async execute(systemPrompt: string, userPrompt: string): Promise<ProviderResult> {
         try {
             const response = await this.openai.chat.completions.create({
                 model: this.model,
@@ -29,12 +29,20 @@ export class UniversalOpenAIProvider implements IProvider {
                 temperature: 0.1,
             });
 
-            return response.choices[0]?.message?.content || null;
+            const content = response.choices[0]?.message?.content || null;
+            // Local models may or may not return usage data
+            const usage = response.usage ? {
+                promptTokens: response.usage.prompt_tokens,
+                completionTokens: response.usage.completion_tokens,
+                totalTokens: response.usage.total_tokens,
+            } : null;
+
+            return { content, usage, model: this.model };
 
         } catch (error: any) {
             console.error('Custom API Error:', error);
             vscode.window.showErrorMessage(`Agentic Gatekeeper: Custom AI Provider Error - ${error.message}`);
-            return null;
+            return { content: null, usage: null, model: this.model };
         }
     }
 }

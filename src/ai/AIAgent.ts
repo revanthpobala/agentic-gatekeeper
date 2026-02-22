@@ -1,4 +1,4 @@
-import { IProvider } from './IProvider';
+import { IProvider, ProviderResult } from './IProvider';
 
 export interface FileContext {
   filePath: string;
@@ -43,7 +43,7 @@ JSON SCHEMA:
   /**
    * Headless validation using the injected AI provider.
    */
-  public async analyze(instructions: string, files: FileContext[], provider: IProvider): Promise<string | null> {
+  public async analyze(instructions: string, files: FileContext[], provider: IProvider): Promise<ProviderResult> {
     const systemPrompt = this.buildSystemPrompt(instructions);
     const userPrompt = this.buildUserPrompt(files);
     return await provider.execute(systemPrompt, userPrompt);
