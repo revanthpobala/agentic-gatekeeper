@@ -37,8 +37,7 @@ export class GeminiProvider implements IProvider {
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userPrompt }
                 ],
-                temperature: 0.1,
-                max_tokens: 4096,
+                temperature: 0.1
             });
 
             const content = response.choices[0]?.message?.content || null;
