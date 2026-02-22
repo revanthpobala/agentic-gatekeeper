@@ -1,12 +1,23 @@
-import { simpleGit, SimpleGit } from 'simple-git';
+import { simpleGit, SimpleGit, StatusResult } from 'simple-git';
 import * as vscode from 'vscode';
 
 
 export class GitContext {
     private git: SimpleGit;
+    private cachedStatus: StatusResult | null = null;
 
     constructor(workspaceRoot: string) {
         this.git = simpleGit(workspaceRoot);
+    }
+
+    /**
+     * Fetches git status once and caches it for the duration of this run.
+     */
+    private async getStatus(): Promise<StatusResult> {
+        if (!this.cachedStatus) {
+            this.cachedStatus = await this.git.status();
+        }
+        return this.cachedStatus;
     }
 
     /**
@@ -14,7 +25,7 @@ export class GitContext {
      */
     public async getStagedFiles(): Promise<string[]> {
         try {
-            const status = await this.git.status();
+            const status = await this.getStatus();
             return status.staged;
         } catch (error) {
             console.error('Failed to get staged files:', error);
@@ -28,7 +39,7 @@ export class GitContext {
      */
     public async getModifiedFiles(): Promise<string[]> {
         try {
-            const status = await this.git.status();
+            const status = await this.getStatus();
             // Combine tracked modifications with completely untracked new files
             return [...status.modified, ...status.not_added];
         } catch (error) {

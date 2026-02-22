@@ -40,7 +40,6 @@ export class MarkdownParser {
      * root-level files like AGENTS.md, and any file in a recognized config directory.
      */
     private classifyRule(relativePath: string): { type: 'global' | 'domain', domainPath?: string } {
-        const lower = relativePath.toLowerCase();
 
         // Root-level markdown files are always global
         if (!relativePath.includes('/')) {
@@ -86,8 +85,8 @@ export class MarkdownParser {
             // as a fallback for dot patterns if the direct scan missed anything)
             try {
                 const relativePattern = new vscode.RelativePattern(this.workspaceRoot, pattern);
-                // Pass null as exclude to ignore .gitignore / files.exclude for rule discovery
-                const uris = await vscode.workspace.findFiles(relativePattern, null);
+                // Exclude node_modules but allow dot-directories
+                const uris = await vscode.workspace.findFiles(relativePattern, '**/node_modules/**');
 
                 for (const uri of uris) {
                     const relativePath = path.relative(this.workspaceRoot, uri.fsPath);
@@ -151,6 +150,9 @@ export class MarkdownParser {
         for (const fullPath of entries) {
             const relativePath = path.relative(this.workspaceRoot, fullPath);
             if (seenPaths.has(relativePath)) { continue; }
+
+            // Skip node_modules
+            if (relativePath.includes('node_modules')) { continue; }
 
             // Check if the file matches the glob pattern
             if (minimatch(relativePath, pattern, { dot: true })) {

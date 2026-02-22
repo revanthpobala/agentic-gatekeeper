@@ -148,7 +148,22 @@ export class GatekeeperEngine {
 
                 const fileContexts: FileContext[] = [];
 
+                // Paths that are rule/config sources — don't analyze these as code
+                const skipPrefixes = ['.gatekeeper/', '.cursor/', '.github/', '.agents/'];
+                const skipExact = ['agents.md', 'AGENTS.md', 'CONTRIBUTING.md', 'ARCHITECTURE.md'];
+
                 for (const relativePath of activeFiles) {
+                    // Skip rule files — they are instructions, not code to audit
+                    const shouldSkip = skipPrefixes.some(p => relativePath.startsWith(p)) ||
+                        skipExact.includes(relativePath) ||
+                        relativePath.endsWith('-gatekeeper.md') ||
+                        relativePath.endsWith('-instructions.md');
+
+                    if (shouldSkip) {
+                        this.outputChannel.appendLine(`  [Skip] ${relativePath} (rule/config file)`);
+                        continue;
+                    }
+
                     const fullPath = path.join(this.workspaceRoot, relativePath);
                     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
                         const content = fs.readFileSync(fullPath, 'utf8');
