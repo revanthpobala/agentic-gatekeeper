@@ -27,7 +27,9 @@ export class WorkspacePatcher {
 
                 // Safety Check: Reject changes that contain placeholder text or "junk" patterns
                 const filtered = parsed.filter(change => {
-                    const content = change.newContent.toLowerCase();
+                    const content = change.newContent.trim();
+                    const lowerContent = content.toLowerCase();
+
                     const junkPatterns = [
                         "full_rewritten_file_content_with_all_fixes",
                         "... (actual rewritten file content) ...",
@@ -36,14 +38,22 @@ export class WorkspacePatcher {
                         "// same as before",
                         "// same as original",
                         "/* ... */",
-                        "same as above"
+                        "same as above",
+                        "compliant" // AI sometimes outputs this inside JSON
                     ];
 
-                    const hasJunk = junkPatterns.some(pattern => content.includes(pattern.toLowerCase()));
+                    // Specific check for "COMPLIANT" as the entire content
+                    if (lowerContent === "compliant") {
+                        console.error(`Patcher: REJECTED change for ${change.filePath} because content is just 'COMPLIANT'.`);
+                        vscode.window.showWarningMessage(`Agentic Gatekeeper: AI returned 'COMPLIANT' as file content for ${change.filePath}. Skipping.`);
+                        return false;
+                    }
 
-                    if (hasJunk) {
-                        console.error(`Patcher: REJECTED change for ${change.filePath} because it contains junk/placeholder text.`);
-                        vscode.window.showWarningMessage(`Agentic Gatekeeper: AI returned a placeholder for ${change.filePath}. Skipping fixing to protect your code.`);
+                    const detectedJunk = junkPatterns.find(pattern => lowerContent.includes(pattern));
+
+                    if (detectedJunk) {
+                        console.error(`Patcher: REJECTED change for ${change.filePath} because it contains junk/placeholder: "${detectedJunk}"`);
+                        vscode.window.showWarningMessage(`Agentic Gatekeeper: AI returned junk/placeholder for ${change.filePath}. Skipping fixing to protect your code.`);
                         return false;
                     }
                     return true;
