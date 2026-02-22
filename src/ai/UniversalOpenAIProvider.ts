@@ -2,15 +2,35 @@ import * as vscode from 'vscode';
 import OpenAI from 'openai';
 import { IProvider, ProviderResult } from './IProvider';
 
+/**
+ * Strips trailing path segments that users commonly paste by mistake.
+ * The OpenAI SDK automatically appends /chat/completions, so if the user
+ * sets the base URL to "http://localhost:4141/v1/chat/completions", we'd
+ * end up hitting "/v1/chat/completions/chat/completions" — a 404.
+ */
+function sanitizeBaseUrl(url: string): string {
+    let sanitized = url.trim().replace(/\/+$/, ''); // strip trailing slashes
+    // Strip /chat/completions if user pasted the full endpoint
+    if (sanitized.endsWith('/chat/completions')) {
+        sanitized = sanitized.replace(/\/chat\/completions$/, '');
+    }
+    // Strip /completions too (some users paste just that)
+    if (sanitized.endsWith('/completions')) {
+        sanitized = sanitized.replace(/\/completions$/, '');
+    }
+    return sanitized;
+}
+
 export class UniversalOpenAIProvider implements IProvider {
     private openai: OpenAI;
     private model: string;
 
     constructor() {
         const config = vscode.workspace.getConfiguration('agenticGatekeeper');
-        const baseUrl = config.get<string>('customBaseUrl') || 'http://localhost:11434/v1'; // Default to Ollama
-        const apiKey = config.get<string>('customApiKey') || 'ollama'; // Local APIs usually ignore this, but SDK requires it
-        this.model = config.get<string>('customModel') || 'llama3';
+        const rawBaseUrl = config.get<string>('custom.baseUrl') || 'http://localhost:11434/v1';
+        const baseUrl = sanitizeBaseUrl(rawBaseUrl);
+        const apiKey = config.get<string>('custom.apiKey') || 'ollama';
+        this.model = config.get<string>('custom.model') || 'llama3';
 
         this.openai = new OpenAI({
             baseURL: baseUrl,

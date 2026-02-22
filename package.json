@@ -178,7 +178,7 @@
         "agenticGatekeeper.custom.baseUrl": {
           "type": "string",
           "default": "http://localhost:11434/v1",
-          "description": "The Base URL for a custom OpenAI-compatible API (e.g., Ollama, LM Studio)."
+          "description": "The Base URL for a custom OpenAI-compatible API (e.g., Ollama, LM Studio, copilot-api). Use only the base path like 'http://localhost:4141/v1' — do NOT include '/chat/completions' (the SDK adds it automatically)."
         },
         "agenticGatekeeper.custom.model": {
           "type": "string",
