@@ -8,6 +8,11 @@ All notable changes to the "agentic-gatekeeper" extension will be documented in 
 - Standardized Marketplace categories for better search discoverability.
 - Enhanced system prompts for recursive subdirectory rule support.
 
+## [1.1.5] - 2026-02-22
+### Fixed
+- **Anti-Junk Defense**: Implemented a mandatory filter that rejects any AI suggested patches containing placeholders (e.g., "// existing code here", "FULL_REWRITTEN_CONTENT").
+- **Stability**: Prevents accidental project corruption where AI models try to be "lazy" by returning partial files.
+
 ## [1.1.4] - 2026-02-22
 ### Added
 - **Performance Sprint**: Introduced `agenticGatekeeper.contextDepth` setting (`full` vs `diff`).

@@ -24,8 +24,33 @@ export class WorkspacePatcher {
 
             if (jsonText) {
                 const parsed = JSON.parse(jsonText.trim()) as FileChange[];
-                console.log("Patcher Successfully Extracted JSON:", JSON.stringify(parsed, null, 2));
-                return parsed;
+
+                // Safety Check: Reject changes that contain placeholder text or "junk" patterns
+                const filtered = parsed.filter(change => {
+                    const content = change.newContent.toLowerCase();
+                    const junkPatterns = [
+                        "full_rewritten_file_content_with_all_fixes",
+                        "... (actual rewritten file content) ...",
+                        "// ... existing code ...",
+                        "// existing code here",
+                        "// same as before",
+                        "// same as original",
+                        "/* ... */",
+                        "same as above"
+                    ];
+
+                    const hasJunk = junkPatterns.some(pattern => content.includes(pattern.toLowerCase()));
+
+                    if (hasJunk) {
+                        console.error(`Patcher: REJECTED change for ${change.filePath} because it contains junk/placeholder text.`);
+                        vscode.window.showWarningMessage(`Agentic Gatekeeper: AI returned a placeholder for ${change.filePath}. Skipping fixing to protect your code.`);
+                        return false;
+                    }
+                    return true;
+                });
+
+                console.log(`Patcher Successfully Extracted JSON: ${filtered.length} valid changes.`);
+                return filtered;
             } else {
                 console.error("Patcher: No JSON array match found in response:", response);
             }

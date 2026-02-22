@@ -21,6 +21,7 @@ ${isDiff ? '### PATCH ANALYSIS MODE:\nYou are looking at GIT DIFFS (patches). On
 2. **Strict Enforcement**: If the code is missing a tag, a comment, a type, or a pattern required by the instructions, it is **NON-COMPLIANT**.
 3. **No False Positives**: Do NOT ignore a Global Rule because its source file lives in a different directory. "Global" means universal.
 4. **Mutative Response**: For every non-compliant file, you MUST provide the FULL rewritten source code in the JSON format below.
+5. **NO PLACEHOLDERS**: Never use phrases like "content goes here" or "same as before". You MUST provide the complete, functional file content.
 
 ### PROJECT INSTRUCTIONS:
 ${instructions}
@@ -39,9 +40,15 @@ ${instructions}
 [
   {
     "filePath": "path/to/file.ext",
-    "newContent": "FULL_REWRITTEN_FILE_CONTENT_WITH_ALL_FIXES"
+    "newContent": "... (actual rewritten file content) ..."
   }
 ]
+
+### CRITICAL:
+DO NOT copy the placeholder string "... (actual rewritten file content) ..." into your response.
+NEVER use "// existing code" or ellipsis to skip parts of the file.
+You MUST provide the TOTAL file content from the first line to the last line.
+If you return a partial file, it will be REJECTED.
 `;
   }
 
