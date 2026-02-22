@@ -59,7 +59,7 @@ I hope this helps!
     assert.strictEqual(result.length, 0); // Try/catch should swallow Error and return []
   });
 
-  test('parseAIResponse extracts JSON if not tricked by preceding loose brackets', () => {
+  test('parseAIResponse extracts JSON if not tricked by preceding loose characters', () => {
     const trickyResponse = `
 I found issues in src/file1.ts and src/file2.ts. Here is the fix:
 
