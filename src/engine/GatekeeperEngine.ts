@@ -93,7 +93,21 @@ export class GatekeeperEngine {
 
                 // 1. Audit Rules
                 progress.report({ message: "Discovering rules..." });
-                const instructions = await markdownParser.getConsolidatedInstructions();
+                const rules = await markdownParser.getRuleContext();
+
+                if (rules.length === 0) {
+                    this.outputChannel.appendLine('Result: No rule files found. Create .gatekeeper/*.md or run "Setup Instructions" first.');
+                    const action = await vscode.window.showWarningMessage(
+                        'Agentic Gatekeeper: No rule files found. Create rules first?',
+                        'Create Rules', 'Cancel'
+                    );
+                    if (action === 'Create Rules') {
+                        vscode.commands.executeCommand('agentic-gatekeeper.setupInstructions');
+                    }
+                    return;
+                }
+
+                const instructions = await markdownParser.getConsolidatedInstructions(rules);
 
                 // 2. Audit Staged & Modified Files
                 progress.report({ message: "Analyzing local changes..." });
@@ -105,21 +119,42 @@ export class GatekeeperEngine {
 
                 const fileContexts: FileContext[] = [];
 
-                // Paths that are rule/config sources — don't analyze these as code
+                // Paths that are rule/config sources - don't analyze these as code
                 const skipPrefixes = ['.gatekeeper/', '.cursor/', '.github/', '.agents/'];
                 const skipExact = ['agents.md', 'AGENTS.md', 'CONTRIBUTING.md', 'ARCHITECTURE.md'];
+
+                // File extensions that are never useful to send to an LLM
+                const skipExtensions = [
+                    '.lock', '.snap', '.map', '.min.js', '.min.css',
+                    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.svg',
+                    '.woff', '.woff2', '.ttf', '.eot',
+                    '.zip', '.tar', '.gz', '.tgz',
+                    '.pdf', '.exe', '.bin', '.dylib', '.so', '.dll',
+                ];
+
+                // File names that are typically generated/lock files
+                const skipFilenames = [
+                    'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
+                    'Cargo.lock', 'poetry.lock', 'Pipfile.lock', 'composer.lock',
+                    'go.sum',
+                ];
 
                 const contextDepth = config.get<string>('contextDepth') || 'full';
 
                 for (const relativePath of activeFiles) {
-                    // Skip rule files — they are instructions, not code to audit
+                    const basename = path.basename(relativePath);
+                    const ext = path.extname(relativePath).toLowerCase();
+
                     const shouldSkip = skipPrefixes.some(p => relativePath.startsWith(p)) ||
                         skipExact.includes(relativePath) ||
                         relativePath.endsWith('-gatekeeper.md') ||
-                        relativePath.endsWith('-instructions.md');
+                        relativePath.endsWith('-instructions.md') ||
+                        skipFilenames.includes(basename) ||
+                        skipExtensions.some(e => relativePath.endsWith(e)) ||
+                        ext === '' && basename.startsWith('.'); // dotfiles with no extension
 
                     if (shouldSkip) {
-                        this.outputChannel.appendLine(`  [Rule Source] ${relativePath} (Honored as instruction; skipping code analysis)`);
+                        this.outputChannel.appendLine(`  [Skipped] ${relativePath}`);
                         continue;
                     }
 
@@ -128,8 +163,6 @@ export class GatekeeperEngine {
                         let content = '';
                         if (contextDepth === 'diff') {
                             content = await gitContext.getStagedDiff(relativePath);
-                            // If it's a new file, the staged diff is the whole file, but if it's untracked, 
-                            // we might need to fallback to reading the file if the diff is empty.
                             if (!content || content.trim() === '') {
                                 content = fs.readFileSync(fullPath, 'utf8');
                             }
@@ -156,19 +189,47 @@ export class GatekeeperEngine {
                 let batches: FileContext[][] = [];
                 try {
                     const instructionTokens = estimateTokens(instructions);
-                    batches = groupIntoBatches(fileContexts, {
+                    const batchResult = groupIntoBatches(fileContexts, {
                         maxTokensPerBatch,
                         instructionTokens,
                         safetyBuffer: 2000
                     });
+                    batches = batchResult.batches;
+
+                    if (batchResult.skipped.length > 0) {
+                        this.outputChannel.appendLine(`  [Too Large] Skipped ${batchResult.skipped.length} file(s) exceeding token budget:`);
+                        for (const s of batchResult.skipped) {
+                            this.outputChannel.appendLine(`    - ${s}`);
+                        }
+                        vscode.window.showWarningMessage(
+                            `Agentic Gatekeeper: ${batchResult.skipped.length} file(s) were too large to analyze and were skipped. See Output.`
+                        );
+                    }
                 } catch (batchError: any) {
                     this.outputChannel.appendLine(`Fatal Batching Error: ${batchError.message}`);
                     vscode.window.showErrorMessage(`Agentic Gatekeeper: ${batchError.message}`);
                     return;
                 }
 
-                const totalFiles = fileContexts.length;
+                if (batches.length === 0) {
+                    this.outputChannel.appendLine('Result: No analyzable files after filtering.');
+                    vscode.window.showInformationMessage('Agentic Gatekeeper: No files could be analyzed (all were too large or filtered out).');
+                    return;
+                }
 
+                // Warn before firing many API calls (e.g. initial commit)
+                if (batches.length > 10) {
+                    const proceed = await vscode.window.showWarningMessage(
+                        `Agentic Gatekeeper: This will make ${batches.length} API calls (${fileContexts.length} files). Continue?`,
+                        'Continue', 'Cancel'
+                    );
+                    if (proceed !== 'Continue') {
+                        this.outputChannel.appendLine('⚠️ Analysis cancelled by user (large batch warning).');
+                        return;
+                    }
+                }
+
+                const totalFiles = fileContexts.length;
                 const allChanges: any[] = [];
                 let hasViolations = false;
                 let hasErrors = false;
@@ -234,7 +295,7 @@ export class GatekeeperEngine {
 
                         if (result.content.trim().toUpperCase() !== "COMPLIANT") {
                             const changes = patcher.parseAIResponse(result.content);
-                            if (changes.length > 0) {
+                            if (changes && changes.length > 0) {
                                 hasViolations = true;
                                 allChanges.push(...changes);
                                 for (const change of changes) {
@@ -281,10 +342,10 @@ export class GatekeeperEngine {
                                 continue;
                             }
 
-                            if (result.content.trim().toUpperCase() !== "COMPLIANT") {
+                            if (result.content.trim().toUpperCase() !== "OK") {
                                 hasViolations = true;
                                 const changes = patcher.parseAIResponse(result.content);
-                                if (changes.length > 0) {
+                                if (changes && changes.length > 0) {
                                     allChanges.push(...changes);
                                     for (const change of changes) {
                                         this.outputChannel.appendLine(`  -> Violations found in ${change.filePath}. Auto-fix mapped.`);
@@ -295,7 +356,7 @@ export class GatekeeperEngine {
                                         this.outputChannel.appendLine(`  -> Continuous Mode: Applying and staging fixes for this batch...`);
                                         const success = await patcher.applyChanges(changes);
                                         if (success) {
-                                            await gitContext.stageFiles(changes.map(c => c.filePath));
+                                            await gitContext.stageFiles(changes.map((c: any) => c.filePath));
                                             this.outputChannel.appendLine(`  -> Batch fixes applied and staged successfully.`);
                                         } else {
                                             this.outputChannel.appendLine(`  -> Batch fix application failed.`);
@@ -312,6 +373,7 @@ export class GatekeeperEngine {
                                 }
                             }
                         } catch (err: any) {
+                            hasErrors = true;
                             this.outputChannel.appendLine(`Error: Validation engine crashed on batch [${fileNames}]. (${err.message})`);
                         }
                     }

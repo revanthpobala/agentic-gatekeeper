@@ -141,12 +141,14 @@ export class MarkdownParser {
 
         const dirPath = path.join(this.workspaceRoot, ...dirParts);
 
-        if (!fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory()) {
+        let isDir = false;
+        try { isDir = (await fs.promises.stat(dirPath)).isDirectory(); } catch {/* not found */ }
+        if (!isDir) {
             return;
         }
 
         // Read all files in the directory and match against the glob
-        const entries = this.readDirRecursive(dirPath);
+        const entries = await this.readDirRecursive(dirPath);
         for (const fullPath of entries) {
             const relativePath = path.relative(this.workspaceRoot, fullPath);
             if (seenPaths.has(relativePath)) { continue; }
@@ -159,7 +161,7 @@ export class MarkdownParser {
                 seenPaths.add(relativePath);
 
                 try {
-                    const content = fs.readFileSync(fullPath, 'utf8');
+                    const content = await fs.promises.readFile(fullPath, 'utf8');
                     const classification = this.classifyRule(relativePath);
                     const label = classification.type === 'global' ? 'GLOBAL' : `DOMAIN (${classification.domainPath})`;
                     this.log(`  + Found rule [${label}]: ${relativePath}`);
@@ -178,16 +180,16 @@ export class MarkdownParser {
     }
 
     /**
-     * Recursively reads all files in a directory.
+     * Recursively reads all files in a directory using async IO.
      */
-    private readDirRecursive(dirPath: string): string[] {
+    private async readDirRecursive(dirPath: string): Promise<string[]> {
         const results: string[] = [];
         try {
-            const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+            const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
             for (const entry of entries) {
                 const fullPath = path.join(dirPath, entry.name);
                 if (entry.isDirectory()) {
-                    results.push(...this.readDirRecursive(fullPath));
+                    results.push(...await this.readDirRecursive(fullPath));
                 } else if (entry.isFile()) {
                     results.push(fullPath);
                 }
@@ -199,10 +201,13 @@ export class MarkdownParser {
     }
 
     /**
-     * Consolidates all found instructions into a single string for prompting.
+     * Consolidates rules into a single string for prompting.
+     * Accepts pre-fetched rules or fetches them if not provided.
      */
-    public async getConsolidatedInstructions(): Promise<string> {
-        const rules = await this.getRuleContext();
+    public async getConsolidatedInstructions(
+        preloaded?: { filename: string, content: string, type: 'global' | 'domain', domainPath?: string }[]
+    ): Promise<string> {
+        const rules = preloaded ?? await this.getRuleContext();
         if (rules.length === 0) {
             return "No specific instructions found.";
         }

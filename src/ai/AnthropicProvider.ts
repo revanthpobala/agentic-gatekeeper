@@ -5,19 +5,17 @@ export class AnthropicProvider implements IProvider {
     private apiKey: string;
     private model: string;
 
-    constructor(providedKey?: string) {
+    constructor(apiKey?: string) {
         const config = vscode.workspace.getConfiguration('agenticGatekeeper');
-        const defaultKey = config.get<string>('anthropicApiKey');
-        this.apiKey = providedKey || defaultKey || '';
-        this.model = config.get<string>('anthropicModel') || 'claude-3-5-sonnet-20241022';
-
-        if (!this.apiKey) {
-            vscode.window.showErrorMessage('Agentic Gatekeeper: Anthropic API Key is missing. Please configure it in settings.');
-        }
+        this.apiKey = apiKey || '';
+        this.model = config.get<string>('anthropic.model') || 'claude-3-5-sonnet-20241022';
     }
 
     public async execute(systemPrompt: string, userPrompt: string): Promise<ProviderResult> {
-        if (!this.apiKey) { return { content: null, usage: null, model: this.model }; }
+        if (!this.apiKey) {
+            vscode.window.showErrorMessage('Agentic Gatekeeper: Anthropic API Key is missing. Please configure it in settings.');
+            return { content: null, usage: null, model: this.model };
+        }
 
         try {
             const response = await fetch('https://api.anthropic.com/v1/messages', {

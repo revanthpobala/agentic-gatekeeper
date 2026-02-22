@@ -3,33 +3,36 @@ import OpenAI from 'openai';
 import { IProvider, ProviderResult } from './IProvider';
 
 export class OpenRouterProvider implements IProvider {
-    private openai: OpenAI;
+    private apiKey: string;
     private model: string;
+    private referer: string;
+    private title: string;
 
-    constructor(providedKey?: string) {
+    constructor(apiKey?: string) {
         const config = vscode.workspace.getConfiguration('agenticGatekeeper');
-        const defaultKey = config.get<string>('openRouterApiKey');
-        const apiKey = providedKey || defaultKey;
-        this.model = config.get<string>('openRouterModel') || 'deepseek/deepseek-coder';
-
-        if (!apiKey) {
-            vscode.window.showErrorMessage('Agentic Gatekeeper: OpenRouter API Key is missing. Please configure it in settings.');
-        }
-
-        // Initialize the OpenAI SDK but point it to OpenRouter's endpoint
-        this.openai = new OpenAI({
-            baseURL: 'https://openrouter.ai/api/v1',
-            apiKey: apiKey || 'MISSING_KEY',
-            defaultHeaders: {
-                'HTTP-Referer': config.get<string>('openRouterReferer') || 'https://github.com/yourusername/yourproject',
-                'X-Title': config.get<string>('openRouterTitle') || 'Agentic Gatekeeper Client',
-            }
-        });
+        this.apiKey = apiKey || '';
+        this.model = config.get<string>('openRouter.model') || 'deepseek/deepseek-coder';
+        this.referer = config.get<string>('openRouterReferer') || 'https://github.com/yourusername/yourproject';
+        this.title = config.get<string>('openRouterTitle') || 'Agentic Gatekeeper Client';
     }
 
     public async execute(systemPrompt: string, userPrompt: string): Promise<ProviderResult> {
+        if (!this.apiKey) {
+            vscode.window.showErrorMessage('Agentic Gatekeeper: OpenRouter API Key is missing. Please configure it in settings.');
+            return { content: null, usage: null, model: this.model };
+        }
+
+        const openai = new OpenAI({
+            baseURL: 'https://openrouter.ai/api/v1',
+            apiKey: this.apiKey,
+            defaultHeaders: {
+                'HTTP-Referer': this.referer,
+                'X-Title': this.title,
+            }
+        });
+
         try {
-            const response = await this.openai.chat.completions.create({
+            const response = await openai.chat.completions.create({
                 model: this.model,
                 messages: [
                     { role: "system", content: systemPrompt },

@@ -3,20 +3,15 @@ import OpenAI from 'openai';
 import { IProvider, ProviderResult } from './IProvider';
 
 export class GeminiProvider implements IProvider {
-    private client: OpenAI;
+    private apiKey: string;
     private model: string;
     private outputChannel: vscode.OutputChannel | undefined;
 
-    constructor(apiKey: string, outputChannel?: vscode.OutputChannel) {
+    constructor(apiKey?: string, outputChannel?: vscode.OutputChannel) {
         this.outputChannel = outputChannel;
         const config = vscode.workspace.getConfiguration('agenticGatekeeper');
-        this.model = config.get<string>('geminiModel') || 'gemini-2.0-flash';
-
-        // Gemini exposes an OpenAI-compatible endpoint — reuse the openai SDK
-        this.client = new OpenAI({
-            apiKey: apiKey,
-            baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/'
-        });
+        this.apiKey = apiKey || '';
+        this.model = config.get<string>('gemini.model') || 'gemini-2.0-flash';
     }
 
     private log(msg: string) {
@@ -24,15 +19,26 @@ export class GeminiProvider implements IProvider {
     }
 
     public async execute(systemPrompt: string, userPrompt: string): Promise<ProviderResult> {
+        if (!this.apiKey) {
+            vscode.window.showErrorMessage('Agentic Gatekeeper: Gemini API Key is missing. Please configure it in settings.');
+            return { content: null, usage: null, model: this.model };
+        }
+
+        const client = new OpenAI({
+            apiKey: this.apiKey,
+            baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/'
+        });
+
         try {
             this.log(`Sending request to Gemini (model: ${this.model})...`);
-            const response = await this.client.chat.completions.create({
+            const response = await client.chat.completions.create({
                 model: this.model,
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userPrompt }
                 ],
                 temperature: 0.1,
+                max_tokens: 4096,
             });
 
             const content = response.choices[0]?.message?.content || null;
@@ -49,7 +55,7 @@ export class GeminiProvider implements IProvider {
         } catch (error: any) {
             const errMsg = error?.message || String(error);
             this.log(`ERROR: ${errMsg}`);
-            vscode.window.showErrorMessage(`Agentic Gatekeeper: Gemini Error - ${errMsg}`);
+            vscode.window.showErrorMessage(`Agentic Gatekeeper: Gemini Provider Error - ${errMsg}`);
             return { content: null, usage: null, model: this.model };
         }
     }

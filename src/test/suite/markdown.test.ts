@@ -24,9 +24,9 @@ suite('MarkdownParser Test Suite', () => {
         };
 
         const result = await parser.getConsolidatedInstructions();
-        assert.ok(result.includes('--- Source: AGENTS.md ---'));
+        assert.ok(result.includes('[[ GLOBAL RULE: AGENTS.md ]]'));
         assert.ok(result.includes('Rule 1: Be nice.'));
-        assert.ok(result.includes('--- Source: docs/rules.md (Domain Path: docs/) ---'));
+        assert.ok(result.includes('[[ DOMAIN RULE (Path: docs/): docs/rules.md ]]'));
         assert.ok(result.includes('Rule 2: Be fast.'));
     });
 });
