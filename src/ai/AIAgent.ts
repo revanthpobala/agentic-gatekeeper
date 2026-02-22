@@ -24,14 +24,16 @@ ${instructions}
 
 ### YOUR TASK:
 1. Audit the STAGED FILES (provided in the User Message) against the Instructions.
-2. If all files are 100% compliant, respond with EXACTLY the word "COMPLIANT".
-3. If ANY file is non-compliant, output ONLY a raw JSON array of objects. Do NOT use markdown code blocks.
+2. Think Step-by-Step: Is EVERY file 100% compliant? If even one tag or comment is missing, it is NOT compliant.
+3. If all files are compliant, respond with EXACTLY the word "COMPLIANT".
+4. If ANY file is non-compliant, output ONLY a raw JSON array of objects.
+5. DO NOT provide a conversational report. DO NOT provide an empty array \`[]\` if you see violations. You MUST rewrite the file to fix the violations.
 
 ### JSON OUTPUT FORMAT:
 [
   {
     "filePath": "path/to/file.ext",
-    "newContent": "FULL_REWRITTEN_FILE_CONTENT"
+    "newContent": "FULL_REWRITTEN_FILE_CONTENT_WITH_ALL_FIXES"
   }
 ]
 `;

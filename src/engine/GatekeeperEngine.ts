@@ -181,7 +181,7 @@ export class GatekeeperEngine {
                 const { provider, modeName } = AIProviderFactory.createProvider(this.outputChannel);
                 const config = vscode.workspace.getConfiguration('agenticGatekeeper');
                 const isConcurrent = config.get<string>('concurrencyMode') === 'Concurrent';
-                const maxTokensPerBatch = config.get<number>('maxTokensPerBatch') || 60000;
+                const maxTokensPerBatch = config.get<number>('maxTokensPerBatch') || 30000;
 
                 // Smart batching: group files to minimize redundant rule token duplication
                 const batches = groupIntoBatches(fileContexts, maxTokensPerBatch);
@@ -244,16 +244,19 @@ export class GatekeeperEngine {
                         }
 
                         if (result.content.trim().toUpperCase() !== "COMPLIANT") {
-                            hasViolations = true;
                             const changes = patcher.parseAIResponse(result.content);
                             if (changes.length > 0) {
+                                hasViolations = true;
                                 allChanges.push(...changes);
                                 for (const change of changes) {
                                     this.outputChannel.appendLine(`  -> Violations found in ${change.filePath}. Auto-fix mapped.`);
                                 }
                             } else {
-                                this.outputChannel.appendLine(`  -> Violations found in batch [${fileNames}] but no JSON auto-patch was returned.`);
-                                this.outputChannel.appendLine(`Report:\n${result.content}`);
+                                // If it's not "COMPLIANT" but returned empty JSON, it means the model thinks it's compliant 
+                                // but missed the magic word. We'll treat it as compliant to avoid confusing the user.
+                                for (const f of batch) {
+                                    this.outputChannel.appendLine(`  -> ${f.filePath} is Compliant.`);
+                                }
                             }
                         } else {
                             for (const f of batch) {

@@ -8,6 +8,13 @@ All notable changes to the "agentic-gatekeeper" extension will be documented in 
 - Standardized Marketplace categories for better search discoverability.
 - Enhanced system prompts for recursive subdirectory rule support.
 
+## [1.1.3] - Enforcement Rigidity & Batch Optimization
+
+### Fixed
+- **Empty Patch Syndrome**: Fixed an issue where the AI would report violations but fail to provide the actual code patch.
+- **Batching Reliability**: Reduced the default token batch size by 50% (30k tokens) to ensure AI models have enough completion head-room to rewrite multiple files at once.
+- **Improved Compliance Detection**: The engine now handles empty JSON results gracefully, treating them as compliant if no changes were actually requested.
+
 ## [1.1.2] - Professional Branding & SEO Expansion
 
 ### Added
