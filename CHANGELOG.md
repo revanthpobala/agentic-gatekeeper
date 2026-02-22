@@ -2,6 +2,13 @@
 
 All notable changes to the "agentic-gatekeeper" extension will be documented in this file.
 
+## [1.1.1] - Stability & Logic Fixes
+
+### Fixed
+- **Rule Discovery for .cursor/rules**: Fixed a critical bug where `vscode.workspace.findFiles` skipped dot-directories (due to gitignore/exclude settings) and incorrectly classified `.cursor/rules` as domain-scoped. Now treats all root dot-directories as Global.
+- **Improved Result Reporting**: Fixed edge cases where AI provider errors could result in a false "Compliant" status.
+- **Performance**: Optimized Git status checks to run once per analysis batch instead of twice.
+
 ## [1.1.0] - Performance & Transparency Update
 
 ### Added

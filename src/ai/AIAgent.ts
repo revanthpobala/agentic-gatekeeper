@@ -14,7 +14,7 @@ Your job is to read the provided PROJECT INSTRUCTIONS and apply them rigidly to 
 CRITICAL INSTRUCTION APPLICATION RULES:
 1. Two-Tier Verification: Instructions are categorized into GLOBAL and DIRECTORY-SPECIFIC.
 2. Global Instructions: You MUST apply these to EVERY staged file you evaluate.
-3. Directory-Specific Instructions: You MUST check the file path of EACH STAGED FILE. You may ONLY apply a directory-specific rule if the staged file lives inside that rule's specific 'Domain Path'. (For example, if a rule has Domain Path 'src/ui', it DOES NOT apply to 'src/database/schema.ts').
+3. Directory-Specific Instructions: You MUST check the file path of EACH STAGED FILE. You may ONLY apply a directory-specific rule if the staged file resides within that rule's specific 'Domain Path' or any of its subdirectories. (For example, if a rule has Domain Path 'src/api', it MUST apply to 'src/api/v1/users.go' but DOES NOT apply to 'src/database/schema.ts').
 4. Ignoring Irrelevant Rules: If a rule does not apply to a file's domain, IGNORE IT COMPLETELY for that file.
 
 PROJECT INSTRUCTIONS:
