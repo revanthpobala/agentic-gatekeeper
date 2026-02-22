@@ -1,6 +1,15 @@
 <p align="center">
   <img src="resources/icon.png" width="128" alt="Agentic Gatekeeper Logo">
 </p>
+<p align="center">
+  <a href="https://marketplace.visualstudio.com/items?itemName=revanthpobala.agentic-gatekeeper">
+    <img src="https://img.shields.io/visual-studio-marketplace/v/revanthpobala.agentic-gatekeeper?label=VS%20Marketplace&logo=visual-studio-code" alt="VS Marketplace">
+  </a>
+  <a href="https://open-vsx.org/extension/revanthpobala/agentic-gatekeeper">
+    <img src="https://img.shields.io/open-vsx/v/revanthpobala/agentic-gatekeeper?label=Open%20VSX&logo=visual-studio-code" alt="Open VSX">
+  </a>
+  <img src="https://img.shields.io/badge/License-Modified%20MIT-blue" alt="License">
+</p>
 
 # Agentic Gatekeeper
 
