@@ -49,13 +49,18 @@ export class GitContext {
     }
 
     /**
-     * Gets the diff for the staged changes
+     * Gets the diff for staged changes.
+     * @param filePath Optional specific file path to get the diff for.
      */
-    public async getStagedDiff(): Promise<string> {
+    public async getStagedDiff(filePath?: string): Promise<string> {
         try {
-            return await this.git.diff(['--cached']);
+            const args = ['--cached'];
+            if (filePath) {
+                args.push(filePath);
+            }
+            return await this.git.diff(args);
         } catch (error) {
-            console.error('Failed to get staged diff:', error);
+            console.error(`Failed to get staged diff${filePath ? ' for ' + filePath : ''}:`, error);
             vscode.window.showErrorMessage('Agentic Gatekeeper: Failed to read Git diff.');
             return '';
         }

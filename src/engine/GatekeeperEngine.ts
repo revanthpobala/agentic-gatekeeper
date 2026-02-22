@@ -3,10 +3,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { GitContext } from './GitContext';
 import { MarkdownParser } from './MarkdownParser';
+import { WorkspacePatcher } from '../applier/WorkspacePatcher';
 import { AIAgent, FileContext } from '../ai/AIAgent';
 import { AIProviderFactory } from '../ai/AIProviderFactory';
-import { WorkspacePatcher } from '../applier/WorkspacePatcher';
-import { TokenUsage, ProviderResult } from '../ai/IProvider';
+import { ProviderResult, TokenUsage } from '../ai/IProvider';
+import { groupIntoBatches, estimateTokens } from './BatchProcessor';
 
 // Pricing per 1M tokens (input / output) in USD
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
@@ -20,57 +21,11 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
     'qwen': { input: 0.00, output: 0.00 },
 };
 
-// Rough token estimation: ~4 characters per token
-function estimateTokens(text: string): number {
-    return Math.ceil(text.length / 4);
-}
-
 function estimateCost(model: string, usage: TokenUsage): number {
     const key = Object.keys(MODEL_PRICING).find(k => model.toLowerCase().includes(k));
     const pricing = key ? MODEL_PRICING[key] : { input: 0, output: 0 };
     return (usage.promptTokens / 1_000_000) * pricing.input
         + (usage.completionTokens / 1_000_000) * pricing.output;
-}
-
-/**
- * Groups files into batches that fit within the token budget.
- * Each batch shares a single system prompt, so grouping reduces total token cost.
- */
-function groupIntoBatches(files: FileContext[], maxTokensPerBatch: number): FileContext[][] {
-    const batches: FileContext[][] = [];
-    let currentBatch: FileContext[] = [];
-    let currentTokens = 0;
-
-    for (const file of files) {
-        const fileTokens = estimateTokens(file.content) + estimateTokens(file.filePath) + 20; // overhead for delimiters
-
-        // If a single file exceeds the budget, it gets its own batch
-        if (fileTokens >= maxTokensPerBatch) {
-            if (currentBatch.length > 0) {
-                batches.push(currentBatch);
-                currentBatch = [];
-                currentTokens = 0;
-            }
-            batches.push([file]);
-            continue;
-        }
-
-        // If adding this file would exceed the budget, start a new batch
-        if (currentTokens + fileTokens > maxTokensPerBatch) {
-            batches.push(currentBatch);
-            currentBatch = [file];
-            currentTokens = fileTokens;
-        } else {
-            currentBatch.push(file);
-            currentTokens += fileTokens;
-        }
-    }
-
-    if (currentBatch.length > 0) {
-        batches.push(currentBatch);
-    }
-
-    return batches;
 }
 
 interface RunAudit {
@@ -133,6 +88,8 @@ export class GatekeeperEngine {
                 const markdownParser = new MarkdownParser(this.workspaceRoot, this.outputChannel);
                 const patcher = new WorkspacePatcher(this.workspaceRoot);
                 const orchestrator = new AIAgent();
+                const config = vscode.workspace.getConfiguration('agenticGatekeeper');
+                const isDryRun = config.get<boolean>('dryRun') === true;
 
                 // 1. Audit Rules
                 progress.report({ message: "Discovering rules..." });
@@ -152,6 +109,8 @@ export class GatekeeperEngine {
                 const skipPrefixes = ['.gatekeeper/', '.cursor/', '.github/', '.agents/'];
                 const skipExact = ['agents.md', 'AGENTS.md', 'CONTRIBUTING.md', 'ARCHITECTURE.md'];
 
+                const contextDepth = config.get<string>('contextDepth') || 'full';
+
                 for (const relativePath of activeFiles) {
                     // Skip rule files — they are instructions, not code to audit
                     const shouldSkip = skipPrefixes.some(p => relativePath.startsWith(p)) ||
@@ -166,7 +125,17 @@ export class GatekeeperEngine {
 
                     const fullPath = path.join(this.workspaceRoot, relativePath);
                     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
-                        const content = fs.readFileSync(fullPath, 'utf8');
+                        let content = '';
+                        if (contextDepth === 'diff') {
+                            content = await gitContext.getStagedDiff(relativePath);
+                            // If it's a new file, the staged diff is the whole file, but if it's untracked, 
+                            // we might need to fallback to reading the file if the diff is empty.
+                            if (!content || content.trim() === '') {
+                                content = fs.readFileSync(fullPath, 'utf8');
+                            }
+                        } else {
+                            content = fs.readFileSync(fullPath, 'utf8');
+                        }
                         fileContexts.push({ filePath: relativePath, content });
                     }
                 }
@@ -179,12 +148,25 @@ export class GatekeeperEngine {
 
                 // 3. AI Orchestration
                 const { provider, modeName } = AIProviderFactory.createProvider(this.outputChannel);
-                const config = vscode.workspace.getConfiguration('agenticGatekeeper');
-                const isConcurrent = config.get<string>('concurrencyMode') === 'Concurrent';
+                const executionStrategy = config.get<string>('executionStrategy') || 'aggregated';
+                const isConcurrent = config.get<string>('concurrencyMode') === 'Concurrent' && executionStrategy !== 'continuous';
                 const maxTokensPerBatch = config.get<number>('maxTokensPerBatch') || 30000;
 
                 // Smart batching: group files to minimize redundant rule token duplication
-                const batches = groupIntoBatches(fileContexts, maxTokensPerBatch);
+                let batches: FileContext[][] = [];
+                try {
+                    const instructionTokens = estimateTokens(instructions);
+                    batches = groupIntoBatches(fileContexts, {
+                        maxTokensPerBatch,
+                        instructionTokens,
+                        safetyBuffer: 2000
+                    });
+                } catch (batchError: any) {
+                    this.outputChannel.appendLine(`Fatal Batching Error: ${batchError.message}`);
+                    vscode.window.showErrorMessage(`Agentic Gatekeeper: ${batchError.message}`);
+                    return;
+                }
+
                 const totalFiles = fileContexts.length;
 
                 const allChanges: any[] = [];
@@ -200,11 +182,12 @@ export class GatekeeperEngine {
                     modelUsed: modeName,
                 };
 
-                this.outputChannel.appendLine(`Mode: ${modeName} | ${totalFiles} file(s) grouped into ${batches.length} batch(es) | Budget: ${maxTokensPerBatch.toLocaleString()} tokens/batch`);
+                this.outputChannel.appendLine(`Mode: ${modeName} | Strategy: ${executionStrategy} | Context: ${contextDepth}`);
+                this.outputChannel.appendLine(`${totalFiles} file(s) -> ${batches.length} batch(es) | Budget: ${maxTokensPerBatch.toLocaleString()} tokens/batch`);
 
                 if (isConcurrent) {
                     const maxConcurrent = config.get<number>('maxConcurrentRequests') || 5;
-                    this.outputChannel.appendLine(`Execution: 🚀 Concurrent (Max ${maxConcurrent} parallel batches)`);
+                    this.outputChannel.appendLine(`Execution: 🚀 Concurrent(Max ${maxConcurrent} parallel batches)`);
 
                     const results: { batch: FileContext[], result: ProviderResult, error?: string }[] = [];
 
@@ -218,9 +201,15 @@ export class GatekeeperEngine {
                         const concurrentBatches = batches.slice(i, i + maxConcurrent);
                         progress.report({ message: `Analyzing batches ${i + 1}–${Math.min(i + maxConcurrent, batches.length)} of ${batches.length}...` });
 
-                        const promises = concurrentBatches.map(async (batch) => {
+                        const promises = concurrentBatches.map(async (batch, idx) => {
+                            const batchNum = i + idx + 1;
+                            const fileNames = batch.map(f => f.filePath).join(', ');
+                            const batchTokens = batch.reduce((sum, f) => sum + estimateTokens(f.content) + estimateTokens(f.filePath) + 50, 0);
+
+                            this.outputChannel.appendLine(`  -> Batch ${batchNum}/${batches.length} [${fileNames}]: ${batchTokens.toLocaleString()} tokens. Sending...`);
+
                             try {
-                                const result = await orchestrator.analyze(instructions, batch, provider);
+                                const result = await orchestrator.analyze(instructions, batch, provider, contextDepth);
                                 return { batch, result };
                             } catch (err: any) {
                                 return { batch, result: { content: null, usage: null, model: modeName } as ProviderResult, error: err.message };
@@ -239,7 +228,7 @@ export class GatekeeperEngine {
 
                         if (error || !result.content) {
                             hasErrors = true;
-                            this.outputChannel.appendLine(`Error: Validation engine failed on batch [${fileNames}]. (${error || 'No response'})`);
+                            this.outputChannel.appendLine(`Error: Validation engine failed on batch[${fileNames}].(${error || 'No response'})`);
                             continue;
                         }
 
@@ -266,7 +255,7 @@ export class GatekeeperEngine {
                     }
 
                 } else {
-                    this.outputChannel.appendLine(`Execution: 🛡️ Sequential`);
+                    this.outputChannel.appendLine(`Execution: 🛡️ Sequential${executionStrategy === 'continuous' ? ' (Continuous Apply)' : ''}`);
 
                     for (let i = 0; i < batches.length; i++) {
                         if (token.isCancellationRequested) {
@@ -277,10 +266,13 @@ export class GatekeeperEngine {
 
                         const batch = batches[i];
                         const fileNames = batch.map(f => f.filePath).join(', ');
+                        const batchTokens = batch.reduce((sum, f) => sum + estimateTokens(f.content) + estimateTokens(f.filePath) + 50, 0);
+
+                        this.outputChannel.appendLine(`  -> Batch ${i + 1}/${batches.length} [${fileNames}]: ${batchTokens.toLocaleString()} tokens. Sending...`);
                         progress.report({ message: `Validating batch ${i + 1}/${batches.length} (${batch.length} files)...` });
 
                         try {
-                            const result = await orchestrator.analyze(instructions, batch, provider);
+                            const result = await orchestrator.analyze(instructions, batch, provider, contextDepth);
                             this.accumulateAudit(audit, result);
 
                             if (!result.content) {
@@ -296,6 +288,19 @@ export class GatekeeperEngine {
                                     allChanges.push(...changes);
                                     for (const change of changes) {
                                         this.outputChannel.appendLine(`  -> Violations found in ${change.filePath}. Auto-fix mapped.`);
+                                    }
+
+                                    // Continuous Strategy: Apply immediately
+                                    if (executionStrategy === 'continuous' && !isDryRun && contextDepth !== 'diff') {
+                                        this.outputChannel.appendLine(`  -> Continuous Mode: Applying and staging fixes for this batch...`);
+                                        const success = await patcher.applyChanges(changes);
+                                        if (success) {
+                                            await gitContext.stageFiles(changes.map(c => c.filePath));
+                                            this.outputChannel.appendLine(`  -> Batch fixes applied and staged successfully.`);
+                                        } else {
+                                            this.outputChannel.appendLine(`  -> Batch fix application failed.`);
+                                            hasErrors = true;
+                                        }
                                     }
                                 } else {
                                     this.outputChannel.appendLine(`  -> Violations found in batch [${fileNames}] but no JSON auto-patch was returned.`);
@@ -319,7 +324,6 @@ export class GatekeeperEngine {
                 }
 
                 // 4. Apply Results
-                const isDryRun = config.get<boolean>('dryRun') === true;
                 progress.report({ message: `Applying rule mutations...` });
 
                 if (!hasViolations && !hasErrors) {
@@ -330,9 +334,16 @@ export class GatekeeperEngine {
                     this.outputChannel.appendLine('Result: ⚠️ INCOMPLETE — One or more batches failed. Cannot confirm compliance.');
                     vscode.window.showWarningMessage('Agentic Gatekeeper: Analysis incomplete — AI provider errors occurred. See Output.');
                 } else if (allChanges.length > 0) {
-                    if (isDryRun) {
+                    if (contextDepth === 'diff') {
+                        this.outputChannel.appendLine(`\nResult: ⚠️ AUDIT ONLY (Diff Mode). Found ${allChanges.length} violation(s), but auto-fix is disabled for partial context.`);
+                        this.outputChannel.appendLine(`Switch to Context Depth: "full" in settings to enable auto-patching.`);
+                        vscode.window.showWarningMessage(`Agentic Gatekeeper: ${allChanges.length} violations found. Switch to 'full' mode to auto-fix.`);
+                    } else if (isDryRun) {
                         this.outputChannel.appendLine(`\nResult: 🧪 DRY RUN ENABLED. Skipping filesystem patches for ${allChanges.length} file(s).`);
                         vscode.window.showInformationMessage(`Agentic Gatekeeper (Dry Run): ${allChanges.length} file(s) would have been patched. See Output.`);
+                    } else if (executionStrategy === 'continuous') {
+                        this.outputChannel.appendLine(`\nResult: ✅ Continuous Execution Complete. ${allChanges.length} file(s) patched and staged batch-by-batch.`);
+                        vscode.window.showInformationMessage(`Agentic Gatekeeper: Continuous patching complete (${allChanges.length} files).`);
                     } else {
                         this.outputChannel.appendLine(`Result: Applying rules to ${allChanges.length} file(s)...`);
                         const success = await patcher.applyChanges(allChanges);

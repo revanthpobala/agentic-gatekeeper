@@ -7,9 +7,12 @@ export interface FileContext {
 
 export class AIAgent {
 
-  private buildSystemPrompt(instructions: string): string {
+  private buildSystemPrompt(instructions: string, contextDepth: string = 'full'): string {
+    const isDiff = contextDepth === 'diff';
     return `You are the 'Agentic Gatekeeper', a world-class, uncompromising code auditor and auto-patcher.
 Your mission: Rigidly enforce the PROJECT INSTRUCTIONS provided below onto the STAGED FILES.
+
+${isDiff ? '### PATCH ANALYSIS MODE:\nYou are looking at GIT DIFFS (patches). Only audit the changed lines. If a rule requires full-file context that is missing from the patch, prioritize rules applicable to the changes.' : ''}
 
 ### MANDATORY EXECUTION PROTOCOL:
 1. **Instruction Hierarchy**:
@@ -27,7 +30,10 @@ ${instructions}
 2. Think Step-by-Step: Is EVERY file 100% compliant? If even one tag or comment is missing, it is NOT compliant.
 3. If all files are compliant, respond with EXACTLY the word "COMPLIANT".
 4. If ANY file is non-compliant, output ONLY a raw JSON array of objects.
-5. DO NOT provide a conversational report. DO NOT provide an empty array \`[]\` if you see violations. You MUST rewrite the file to fix the violations.
+5. **Auto-Fix Protocol**:
+   - If in FULL FILE mode: You MUST provide the FULL rewritten source code.
+   - If in PATCH/DIFF mode: You MUST provide the FULL rewritten source code of the file (if you can infer it) OR return a fix for the violation in the same JSON structure. 
+   Note: In DIFF mode, if you cannot safely rewrite the file, still list the file in the JSON with an empty "newContent" to flag the violation.
 
 ### JSON OUTPUT FORMAT:
 [
@@ -46,8 +52,13 @@ ${instructions}
   /**
    * Headless validation using the injected AI provider.
    */
-  public async analyze(instructions: string, files: FileContext[], provider: IProvider): Promise<ProviderResult> {
-    const systemPrompt = this.buildSystemPrompt(instructions);
+  public async analyze(
+    instructions: string,
+    files: FileContext[],
+    provider: IProvider,
+    contextDepth: string = 'full'
+  ): Promise<ProviderResult> {
+    const systemPrompt = this.buildSystemPrompt(instructions, contextDepth);
     const userPrompt = this.buildUserPrompt(files);
     return await provider.execute(systemPrompt, userPrompt);
   }

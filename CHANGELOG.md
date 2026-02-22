@@ -8,8 +8,25 @@ All notable changes to the "agentic-gatekeeper" extension will be documented in 
 - Standardized Marketplace categories for better search discoverability.
 - Enhanced system prompts for recursive subdirectory rule support.
 
-## [1.1.3] - Enforcement Rigidity & Batch Optimization
+## [1.1.4] - 2026-02-22
+### Added
+- **Performance Sprint**: Introduced `agenticGatekeeper.contextDepth` setting (`full` vs `diff`).
+  - `diff` mode provides ~10x-50x faster audits for large files by only analyzing staged changes.
+- **Reliability Upgrade**: Introduced `agenticGatekeeper.executionStrategy` (`aggregated` | `continuous`).
+  - `continuous` mode applies and stages fixes batch-by-batch, preserving progress if the AI provider fails.
+- **Batch Telemetry**: Real-time token usage logging in the Output channel for better transparency.
+- **Improved Parsing**: Robust JSON extraction logic that handles markdown blocks and conversational AI noise.
 
+### Changed
+- Lowered default `maxTokensPerBatch` to 20,000 to improve stability with local LLM providers (Ollama, LM Studio).
+- Re-aligned Global vs Domain instruction hierarchy for absolute rigidity.
+
+### Fixed
+- Fatal '413 Request Entity Too Large' errors by implementing strict token budgeting.
+- Concurrency "race conditions" in continuous execution mode.
+- Minor log spacing and formatting inconsistencies.
+
+## [1.1.3] - Enforcement Rigidity & Batch Optimization
 ### Fixed
 - **Empty Patch Syndrome**: Fixed an issue where the AI would report violations but fail to provide the actual code patch.
 - **Batching Reliability**: Reduced the default token batch size by 50% (30k tokens) to ensure AI models have enough completion head-room to rewrite multiple files at once.

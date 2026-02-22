@@ -1,8 +1,8 @@
 {
   "name": "agentic-gatekeeper",
-  "displayName": "Agentic Gatekeeper | AI Code Review & Auto-Fix",
-  "description": "The most powerful AI Agentic workflow for VS Code. Automatically enforce architectural rules, security guidelines, and coding standards using Claude, GPT, and DeepSeek. Actively patches your code before you commit.",
-  "version": "1.1.3",
+  "displayName": "Agentic Gatekeeper | Automated Rule Enforcement & Auto-Patch",
+  "description": "The industry's first Agentic Rule Enforcer. Automatically compare your Project Ruleset against staged changes and apply full-file patches using Claude, GPT, Qwen, and DeepSeek. Stop technical debt before it hits your branch.",
+  "version": "1.1.4",
   "publisher": "revanthpobala",
   "author": "Revanth Pobala",
   "license": "SEE LICENSE IN LICENSE.txt",
@@ -125,8 +125,26 @@
         },
         "agenticGatekeeper.maxTokensPerBatch": {
           "type": "number",
-          "default": 60000,
-          "description": "Maximum estimated tokens of file content per API request. Files are grouped into batches to minimize redundant rule-token duplication. Lower values = more API calls but safer for smaller context windows."
+          "default": 20000,
+          "description": "Maximum estimated tokens of file content per API request. Files are grouped into batches to minimize redundant rule-token duplication. Lower values (15k-25k) are highly recommended for local LLMs (Ollama/DeepSeek) to prevent stalls."
+        },
+        "agenticGatekeeper.contextDepth": {
+          "type": "string",
+          "enum": [
+            "full",
+            "diff"
+          ],
+          "default": "full",
+          "description": "Analysis depth: 'full' sends the entire file content (best for global rules). 'diff' sends only the staged changes (standard git diff), which is ~10x-50x faster for large files but may skip rules requiring full file context."
+        },
+        "agenticGatekeeper.executionStrategy": {
+          "type": "string",
+          "enum": [
+            "aggregated",
+            "continuous"
+          ],
+          "default": "aggregated",
+          "description": "Execution strategy: 'aggregated' audits everything first, then applies all fixes (safer). 'continuous' analyzes one batch and applies fixes immediately before moving to the next (best for very large sets or unreliable local LLMs)."
         },
         "agenticGatekeeper.dryRun": {
           "type": "boolean",

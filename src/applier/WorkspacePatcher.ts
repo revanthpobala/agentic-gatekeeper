@@ -18,13 +18,13 @@ export class WorkspacePatcher {
      */
     public parseAIResponse(response: string): FileChange[] {
         try {
-            // Very naive extraction: Find the first array-looking JSON block.
-            // In a production environment, we would use structured output from the LLM
-            // or a more robust regex to locate the JSON payload.
-            const match = response.match(/\[\s*\{[\s\S]*\}\s*\]/);
-            if (match) {
-                const parsed = JSON.parse(match[0]) as FileChange[];
-                console.log("Patcher Successfully Extract JSON:", JSON.stringify(parsed, null, 2));
+            // Improved extraction: Handle markdown JSON blocks if present
+            const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || response.match(/\[\s*\{[\s\S]*\}\s*\]/);
+            const jsonText = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : null;
+
+            if (jsonText) {
+                const parsed = JSON.parse(jsonText.trim()) as FileChange[];
+                console.log("Patcher Successfully Extracted JSON:", JSON.stringify(parsed, null, 2));
                 return parsed;
             } else {
                 console.error("Patcher: No JSON array match found in response:", response);
