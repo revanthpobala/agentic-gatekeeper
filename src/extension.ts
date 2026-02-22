@@ -6,7 +6,6 @@ import { GatekeeperEngine } from './engine/GatekeeperEngine';
 export function activate(context: vscode.ExtensionContext) {
 
 	console.log('Agentic Gatekeeper is now active.');
-
 	// Create diagnostic output channel
 	const outputChannel = vscode.window.createOutputChannel('Agentic Gatekeeper');
 	outputChannel.appendLine('Agentic Gatekeeper extension activated.');

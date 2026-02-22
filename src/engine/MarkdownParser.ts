@@ -211,17 +211,17 @@ export class MarkdownParser {
 
         const globalRules = rules.filter(r => r.type === 'global');
         if (globalRules.length > 0) {
-            output += "### GLOBAL INSTRUCTIONS (Apply to ALL files)\n\n";
+            output += "### GLOBAL INSTRUCTIONS (APPLY TO EVERY FILE)\n\n";
             for (const rule of globalRules) {
-                output += `--- Source: ${rule.filename} ---\n${rule.content}\n\n`;
+                output += `[[ GLOBAL RULE: ${rule.filename} ]]\n${rule.content}\n\n`;
             }
         }
 
         const domainRules = rules.filter(r => r.type === 'domain');
         if (domainRules.length > 0) {
-            output += "### DIRECTORY-SPECIFIC INSTRUCTIONS (Apply ONLY to files within the specified Domain Path)\n\n";
+            output += "### DOMAIN-SPECIFIC INSTRUCTIONS (APPLY ONLY TO TARGET DIRECTORY)\n\n";
             for (const rule of domainRules) {
-                output += `--- Source: ${rule.filename} (Domain Path: ${rule.domainPath}/) ---\n${rule.content}\n\n`;
+                output += `[[ DOMAIN RULE (Path: ${rule.domainPath}/): ${rule.filename} ]]\n${rule.content}\n\n`;
             }
         }
 

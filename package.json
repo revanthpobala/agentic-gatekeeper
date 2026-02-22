@@ -1,8 +1,8 @@
 {
   "name": "agentic-gatekeeper",
-  "displayName": "agentic-gatekeeper",
-  "description": "The Ultimate Autonomous Pre-Commit Hook. Validates, auto-patches, and enforces Markdown rules on staged code using powerful AI Agents like Claude 4.6, DeepSeek V4, OpenAI GPT-5.3-Codex, Grok 4, and Local LLMs.",
-  "version": "1.1.0",
+  "displayName": "Agentic Gatekeeper | AI Code Review & Auto-Fix",
+  "description": "The most powerful AI Agentic workflow for VS Code. Automatically enforce architectural rules, security guidelines, and coding standards using Claude, GPT, and DeepSeek. Actively patches your code before you commit.",
+  "version": "1.1.2",
   "publisher": "revanthpobala",
   "author": "Revanth Pobala",
   "license": "SEE LICENSE IN LICENSE.txt",
@@ -28,8 +28,15 @@
     "gemini-3",
     "grok-4",
     "llama-4",
+    "markdown",
+    "markdown runner",
+    "markdown instructions",
     "code review",
     "linter",
+    "productivity",
+    "automation",
+    "clean code",
+    "auto-fix",
     "pre-commit",
     "autonomous"
   ],
@@ -46,6 +53,12 @@
     "vscode": "^1.90.0"
   },
   "categories": [
+    "Machine Learning",
+    "Linters",
+    "Formatters",
+    "Testing",
+    "SCM Providers",
+    "Education",
     "Other"
   ],
   "activationEvents": [

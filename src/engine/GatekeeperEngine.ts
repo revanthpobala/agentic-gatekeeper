@@ -160,7 +160,7 @@ export class GatekeeperEngine {
                         relativePath.endsWith('-instructions.md');
 
                     if (shouldSkip) {
-                        this.outputChannel.appendLine(`  [Skip] ${relativePath} (rule/config file)`);
+                        this.outputChannel.appendLine(`  [Rule Source] ${relativePath} (Honored as instruction; skipping code analysis)`);
                         continue;
                     }
 
