@@ -2,6 +2,26 @@
 
 All notable changes to the "agentic-gatekeeper" extension will be documented in this file.
 
+## [1.1.0] - Performance & Transparency Update
+
+### Added
+- **Token Usage & Cost Audit**: Every run prints a detailed audit summary showing total tokens consumed, prompt/completion breakdown, API calls made, and estimated USD cost.
+- **Smart Token Batching**: Files are intelligently grouped into batches based on a configurable token budget (`maxTokensPerBatch`, default 60K). Reduces redundant rule-token duplication — cutting input costs by up to 78% on large commits.
+- **New Settings**: `maxTokensPerBatch` to control batch size per API request.
+
+### Changed
+- `IProvider.execute()` now returns a structured `ProviderResult` with token usage metadata and model identifier.
+- System prompt updated to evaluate multiple staged files per request (multi-file batch analysis).
+- Audit summary now displays `API Calls Made` to make batching efficiency visible.
+
+### Fixed
+- **Model Selection Crash**: Native IDE provider now skips known-broken models (`gpt-5-mini`) and auto-selects stable models via a preference list (`gpt-4.1` → `gpt-4o` → `claude-haiku-4.5`).
+- **False Compliance Reporting**: Engine no longer reports "Code is fully compliant" when AI provider calls fail. Shows `"⚠️ INCOMPLETE"` warning instead.
+- **Double-Path 404**: `UniversalOpenAIProvider` now strips `/chat/completions` from base URLs if users paste the full endpoint path (the SDK appends it automatically).
+- **Custom Provider Auto-Detection**: Factory now auto-upgrades from Native IDE when the custom base URL is changed, not just the API key.
+
+---
+
 ## [1.0.0] - Launch Release
 
 ### Added
