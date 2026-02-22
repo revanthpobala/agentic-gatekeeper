@@ -1,6 +1,6 @@
 {
   "name": "agentic-gatekeeper",
-  "displayName": "Agentic Gatekeeper | Automated Rule Enforcement & Auto-Patch",
+  "displayName": "Agentic Gatekeeper",
   "description": "The industry's first Agentic Rule Enforcer. Automatically compare your Project Ruleset against staged changes and apply full-file patches using Claude, GPT, Qwen, and DeepSeek. Stop technical debt before it hits your branch.",
   "version": "1.1.5",
   "publisher": "revanthpobala",
