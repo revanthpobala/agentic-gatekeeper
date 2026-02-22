@@ -174,6 +174,7 @@ export class GatekeeperEngine {
 
                 const allChanges: any[] = [];
                 let hasViolations = false;
+                let hasErrors = false;
 
                 const audit: RunAudit = {
                     totalPromptTokens: 0,
@@ -222,6 +223,7 @@ export class GatekeeperEngine {
                         const fileNames = batch.map(f => f.filePath).join(', ');
 
                         if (error || !result.content) {
+                            hasErrors = true;
                             this.outputChannel.appendLine(`Error: Validation engine failed on batch [${fileNames}]. (${error || 'No response'})`);
                             continue;
                         }
@@ -264,6 +266,7 @@ export class GatekeeperEngine {
                             this.accumulateAudit(audit, result);
 
                             if (!result.content) {
+                                hasErrors = true;
                                 this.outputChannel.appendLine(`Error: Validation engine failed on batch [${fileNames}]. Skipping.`);
                                 continue;
                             }
@@ -301,10 +304,13 @@ export class GatekeeperEngine {
                 const isDryRun = config.get<boolean>('dryRun') === true;
                 progress.report({ message: `Applying rule mutations...` });
 
-                if (!hasViolations) {
+                if (!hasViolations && !hasErrors) {
                     this.outputChannel.appendLine('Result: OK (Entire changeset is Compliant)');
                     this.outputChannel.appendLine('Final Verification Complete: 0 files required patching.');
                     vscode.window.showInformationMessage('Agentic Gatekeeper: Code is fully compliant.');
+                } else if (hasErrors && !hasViolations && allChanges.length === 0) {
+                    this.outputChannel.appendLine('Result: ⚠️ INCOMPLETE — One or more batches failed. Cannot confirm compliance.');
+                    vscode.window.showWarningMessage('Agentic Gatekeeper: Analysis incomplete — AI provider errors occurred. See Output.');
                 } else if (allChanges.length > 0) {
                     if (isDryRun) {
                         this.outputChannel.appendLine(`\nResult: 🧪 DRY RUN ENABLED. Skipping filesystem patches for ${allChanges.length} file(s).`);

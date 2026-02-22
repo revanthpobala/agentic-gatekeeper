@@ -1,6 +1,12 @@
 import * as vscode from 'vscode';
 import { IProvider, ProviderResult } from './IProvider';
 
+// Models known to be listed but not actually supported
+const BLOCKED_MODELS = ['gpt-5-mini', 'oswe-vscode-prime', 'copilot-fast'];
+
+// Preference order: try stable, well-known models first
+const PREFERRED_MODEL_ORDER = ['gpt-4.1', 'gpt-4o', 'claude-haiku-4.5', 'gpt-4o-mini', 'auto'];
+
 export class NativeIDEProvider implements IProvider {
     private outputChannel: vscode.OutputChannel | undefined;
     private cachedModelPromise: Promise<vscode.LanguageModelChat | null> | null = null;
@@ -34,8 +40,7 @@ export class NativeIDEProvider implements IProvider {
                 const config = vscode.workspace.getConfiguration('agenticGatekeeper');
                 const selector = config.get<string>('native.modelSelector')?.trim().toLowerCase();
 
-                let chatModel = models[0]; // fallback default
-
+                // 1. If user explicitly set a preference, honor it
                 if (selector) {
                     const targetModel = models.find(m =>
                         m.id.toLowerCase().includes(selector) ||
@@ -43,15 +48,38 @@ export class NativeIDEProvider implements IProvider {
                     );
 
                     if (targetModel) {
-                        chatModel = targetModel;
-                        this.log(`User preferred model '${selector}' matched with: ${chatModel.id}`);
+                        this.log(`User preferred model '${selector}' matched with: ${targetModel.id}`);
+                        return targetModel;
                     } else {
-                        this.log(`WARNING: User preferred model '${selector}' was not found. Falling back to default.`);
+                        this.log(`WARNING: User preferred model '${selector}' was not found. Falling back to auto-select.`);
                     }
                 }
 
-                this.log(`Using model: ${chatModel.id}`);
-                return chatModel;
+                // 2. Filter out known-broken models
+                const usableModels = models.filter(m =>
+                    !BLOCKED_MODELS.some(blocked => m.id.toLowerCase().includes(blocked))
+                );
+
+                if (usableModels.length === 0) {
+                    this.log('WARNING: All available models are blocked. Trying models[0] as last resort.');
+                    return models[0];
+                }
+
+                // 3. Pick the best model by preference order
+                for (const preferred of PREFERRED_MODEL_ORDER) {
+                    const match = usableModels.find(m =>
+                        m.id.toLowerCase().includes(preferred) ||
+                        m.family.toLowerCase().includes(preferred)
+                    );
+                    if (match) {
+                        this.log(`Auto-selected model: ${match.id} (matched preference '${preferred}')`);
+                        return match;
+                    }
+                }
+
+                // 4. Fallback: first usable model
+                this.log(`Using first usable model: ${usableModels[0].id}`);
+                return usableModels[0];
             })();
         }
         return this.cachedModelPromise;
@@ -85,6 +113,12 @@ export class NativeIDEProvider implements IProvider {
         } catch (error: any) {
             const errMsg = error?.message || String(error);
             this.log(`ERROR: ${errMsg}`);
+
+            // If the model is not supported, clear the cache so next call retries with a different model
+            if (errMsg.includes('model_not_supported') || errMsg.includes('not supported')) {
+                this.log('Model not supported. Clearing cache to retry with next available model.');
+                this.cachedModelPromise = null;
+            }
 
             // Check for consent-related errors
             if (errMsg.includes('consent') || errMsg.includes('permission') || errMsg.includes('access')) {
