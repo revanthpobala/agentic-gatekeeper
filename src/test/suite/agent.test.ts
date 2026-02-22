@@ -14,7 +14,7 @@ suite('AIAgent Integration Test Suite', () => {
         const prompt = buildSystemPrompt(mockInstructions);
 
         // Ensure the prompt enforces the SINGLE FILE rule since our sequential update
-        assert.ok(prompt.includes('SINGLE STAGED FILE'), 'System prompt should define it is analyzing a single file context');
+        assert.ok(prompt.includes('ALL STAGED FILES'), 'System prompt should define it is analyzing staged files');
         assert.ok(prompt.includes(mockInstructions), 'System prompt should inject the rules');
         assert.ok(prompt.includes('JSON SCHEMA'), 'System prompt should define the exact JSON return structure');
     });

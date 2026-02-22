@@ -110,6 +110,11 @@
           "default": 5,
           "description": "Maximum number of parallel AI requests to run when Concurrency Mode is enabled. Prevents API rate limiting and excessive thread spawning."
         },
+        "agenticGatekeeper.maxTokensPerBatch": {
+          "type": "number",
+          "default": 60000,
+          "description": "Maximum estimated tokens of file content per API request. Files are grouped into batches to minimize redundant rule-token duplication. Lower values = more API calls but safer for smaller context windows."
+        },
         "agenticGatekeeper.dryRun": {
           "type": "boolean",
           "default": false,

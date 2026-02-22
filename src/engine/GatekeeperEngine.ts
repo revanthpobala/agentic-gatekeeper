@@ -20,6 +20,11 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
     'qwen': { input: 0.00, output: 0.00 },
 };
 
+// Rough token estimation: ~4 characters per token
+function estimateTokens(text: string): number {
+    return Math.ceil(text.length / 4);
+}
+
 function estimateCost(model: string, usage: TokenUsage): number {
     const key = Object.keys(MODEL_PRICING).find(k => model.toLowerCase().includes(k));
     const pricing = key ? MODEL_PRICING[key] : { input: 0, output: 0 };
@@ -27,11 +32,53 @@ function estimateCost(model: string, usage: TokenUsage): number {
         + (usage.completionTokens / 1_000_000) * pricing.output;
 }
 
+/**
+ * Groups files into batches that fit within the token budget.
+ * Each batch shares a single system prompt, so grouping reduces total token cost.
+ */
+function groupIntoBatches(files: FileContext[], maxTokensPerBatch: number): FileContext[][] {
+    const batches: FileContext[][] = [];
+    let currentBatch: FileContext[] = [];
+    let currentTokens = 0;
+
+    for (const file of files) {
+        const fileTokens = estimateTokens(file.content) + estimateTokens(file.filePath) + 20; // overhead for delimiters
+
+        // If a single file exceeds the budget, it gets its own batch
+        if (fileTokens >= maxTokensPerBatch) {
+            if (currentBatch.length > 0) {
+                batches.push(currentBatch);
+                currentBatch = [];
+                currentTokens = 0;
+            }
+            batches.push([file]);
+            continue;
+        }
+
+        // If adding this file would exceed the budget, start a new batch
+        if (currentTokens + fileTokens > maxTokensPerBatch) {
+            batches.push(currentBatch);
+            currentBatch = [file];
+            currentTokens = fileTokens;
+        } else {
+            currentBatch.push(file);
+            currentTokens += fileTokens;
+        }
+    }
+
+    if (currentBatch.length > 0) {
+        batches.push(currentBatch);
+    }
+
+    return batches;
+}
+
 interface RunAudit {
     totalPromptTokens: number;
     totalCompletionTokens: number;
     totalCost: number;
     filesAnalyzed: number;
+    apiCalls: number;
     modelUsed: string;
 }
 
@@ -50,7 +97,7 @@ export class GatekeeperEngine {
             audit.totalCompletionTokens += result.usage.completionTokens;
             audit.totalCost += estimateCost(result.model, result.usage);
         }
-        audit.filesAnalyzed++;
+        audit.apiCalls++;
         if (result.model) {
             audit.modelUsed = result.model;
         }
@@ -62,6 +109,7 @@ export class GatekeeperEngine {
         this.outputChannel.appendLine('--- Gatekeeper Audit ---');
         this.outputChannel.appendLine(`Provider Model: ${audit.modelUsed}`);
         this.outputChannel.appendLine(`Files Analyzed: ${audit.filesAnalyzed}`);
+        this.outputChannel.appendLine(`API Calls Made: ${audit.apiCalls}`);
         if (totalTokens > 0) {
             this.outputChannel.appendLine(`Total Tokens: ${totalTokens.toLocaleString()} (Prompt: ${audit.totalPromptTokens.toLocaleString()} | Completion: ${audit.totalCompletionTokens.toLocaleString()})`);
             this.outputChannel.appendLine(`Estimated Cost: $${audit.totalCost.toFixed(4)}`);
@@ -118,40 +166,48 @@ export class GatekeeperEngine {
                 const { provider, modeName } = AIProviderFactory.createProvider(this.outputChannel);
                 const config = vscode.workspace.getConfiguration('agenticGatekeeper');
                 const isConcurrent = config.get<string>('concurrencyMode') === 'Concurrent';
+                const maxTokensPerBatch = config.get<number>('maxTokensPerBatch') || 60000;
 
-                const allChanges = [];
+                // Smart batching: group files to minimize redundant rule token duplication
+                const batches = groupIntoBatches(fileContexts, maxTokensPerBatch);
+                const totalFiles = fileContexts.length;
+
+                const allChanges: any[] = [];
                 let hasViolations = false;
 
                 const audit: RunAudit = {
                     totalPromptTokens: 0,
                     totalCompletionTokens: 0,
                     totalCost: 0,
-                    filesAnalyzed: 0,
+                    filesAnalyzed: totalFiles,
+                    apiCalls: 0,
                     modelUsed: modeName,
                 };
 
+                this.outputChannel.appendLine(`Mode: ${modeName} | ${totalFiles} file(s) grouped into ${batches.length} batch(es) | Budget: ${maxTokensPerBatch.toLocaleString()} tokens/batch`);
+
                 if (isConcurrent) {
                     const maxConcurrent = config.get<number>('maxConcurrentRequests') || 5;
-                    this.outputChannel.appendLine(`Mode: ${modeName} [🚀 Concurrent Execution - Max ${maxConcurrent} Threads]`);
+                    this.outputChannel.appendLine(`Execution: 🚀 Concurrent (Max ${maxConcurrent} parallel batches)`);
 
-                    const results: { fileCtx: FileContext, result: ProviderResult, error?: string }[] = [];
+                    const results: { batch: FileContext[], result: ProviderResult, error?: string }[] = [];
 
-                    for (let i = 0; i < fileContexts.length; i += maxConcurrent) {
+                    for (let i = 0; i < batches.length; i += maxConcurrent) {
                         if (token.isCancellationRequested) {
                             this.outputChannel.appendLine('⚠️ Analysis Aborted by User.');
                             vscode.window.showInformationMessage('Agentic Gatekeeper: Analysis aborted.');
                             return;
                         }
 
-                        const batch = fileContexts.slice(i, i + maxConcurrent);
-                        progress.report({ message: `Spinning up analysis... (Batch ${Math.floor(i / maxConcurrent) + 1} of ${Math.ceil(fileContexts.length / maxConcurrent)})` });
+                        const concurrentBatches = batches.slice(i, i + maxConcurrent);
+                        progress.report({ message: `Analyzing batches ${i + 1}–${Math.min(i + maxConcurrent, batches.length)} of ${batches.length}...` });
 
-                        const promises = batch.map(async (fileCtx) => {
+                        const promises = concurrentBatches.map(async (batch) => {
                             try {
-                                const result = await orchestrator.analyze(instructions, [fileCtx], provider);
-                                return { fileCtx, result };
+                                const result = await orchestrator.analyze(instructions, batch, provider);
+                                return { batch, result };
                             } catch (err: any) {
-                                return { fileCtx, result: { content: null, usage: null, model: modeName } as ProviderResult, error: err.message };
+                                return { batch, result: { content: null, usage: null, model: modeName } as ProviderResult, error: err.message };
                             }
                         });
 
@@ -161,11 +217,12 @@ export class GatekeeperEngine {
 
                     progress.report({ message: `Verifying final analysis results...` });
 
-                    for (const { fileCtx, result, error } of results) {
+                    for (const { batch, result, error } of results) {
                         this.accumulateAudit(audit, result);
+                        const fileNames = batch.map(f => f.filePath).join(', ');
 
                         if (error || !result.content) {
-                            this.outputChannel.appendLine(`Error: Validation engine failed on ${fileCtx.filePath}. (${error || 'No response'})`);
+                            this.outputChannel.appendLine(`Error: Validation engine failed on batch [${fileNames}]. (${error || 'No response'})`);
                             continue;
                         }
 
@@ -174,36 +231,40 @@ export class GatekeeperEngine {
                             const changes = patcher.parseAIResponse(result.content);
                             if (changes.length > 0) {
                                 allChanges.push(...changes);
-                                this.outputChannel.appendLine(`  -> Violations found in ${fileCtx.filePath}. Auto-fix mapped.`);
+                                for (const change of changes) {
+                                    this.outputChannel.appendLine(`  -> Violations found in ${change.filePath}. Auto-fix mapped.`);
+                                }
                             } else {
-                                this.outputChannel.appendLine(`  -> Violations found in ${fileCtx.filePath} but no JSON auto-patch was returned.`);
+                                this.outputChannel.appendLine(`  -> Violations found in batch [${fileNames}] but no JSON auto-patch was returned.`);
                                 this.outputChannel.appendLine(`Report:\n${result.content}`);
                             }
                         } else {
-                            this.outputChannel.appendLine(`  -> ${fileCtx.filePath} is Compliant.`);
+                            for (const f of batch) {
+                                this.outputChannel.appendLine(`  -> ${f.filePath} is Compliant.`);
+                            }
                         }
                     }
 
                 } else {
-                    this.outputChannel.appendLine(`Mode: ${modeName} [🛡️ Sequential Execution]`);
+                    this.outputChannel.appendLine(`Execution: 🛡️ Sequential`);
 
-                    // Process each file sequentially to avoid context window overflow
-                    for (let i = 0; i < fileContexts.length; i++) {
+                    for (let i = 0; i < batches.length; i++) {
                         if (token.isCancellationRequested) {
                             this.outputChannel.appendLine('⚠️ Analysis Aborted by User.');
                             vscode.window.showInformationMessage('Agentic Gatekeeper: Analysis aborted.');
                             return;
                         }
 
-                        const fileCtx = fileContexts[i];
-                        progress.report({ message: `Validating ${i + 1}/${fileContexts.length}: ${fileCtx.filePath}...` });
+                        const batch = batches[i];
+                        const fileNames = batch.map(f => f.filePath).join(', ');
+                        progress.report({ message: `Validating batch ${i + 1}/${batches.length} (${batch.length} files)...` });
 
                         try {
-                            const result = await orchestrator.analyze(instructions, [fileCtx], provider);
+                            const result = await orchestrator.analyze(instructions, batch, provider);
                             this.accumulateAudit(audit, result);
 
                             if (!result.content) {
-                                this.outputChannel.appendLine(`Error: Validation engine failed on ${fileCtx.filePath}. Skipping.`);
+                                this.outputChannel.appendLine(`Error: Validation engine failed on batch [${fileNames}]. Skipping.`);
                                 continue;
                             }
 
@@ -212,16 +273,20 @@ export class GatekeeperEngine {
                                 const changes = patcher.parseAIResponse(result.content);
                                 if (changes.length > 0) {
                                     allChanges.push(...changes);
-                                    this.outputChannel.appendLine(`  -> Violations found in ${fileCtx.filePath}. Auto-fix mapped.`);
+                                    for (const change of changes) {
+                                        this.outputChannel.appendLine(`  -> Violations found in ${change.filePath}. Auto-fix mapped.`);
+                                    }
                                 } else {
-                                    this.outputChannel.appendLine(`  -> Violations found in ${fileCtx.filePath} but no JSON auto-patch was returned.`);
+                                    this.outputChannel.appendLine(`  -> Violations found in batch [${fileNames}] but no JSON auto-patch was returned.`);
                                     this.outputChannel.appendLine(`Report:\n${result.content}`);
                                 }
                             } else {
-                                this.outputChannel.appendLine(`  -> ${fileCtx.filePath} is Compliant.`);
+                                for (const f of batch) {
+                                    this.outputChannel.appendLine(`  -> ${f.filePath} is Compliant.`);
+                                }
                             }
                         } catch (err: any) {
-                            this.outputChannel.appendLine(`Error: Validation engine crashed on ${fileCtx.filePath}. (${err.message})`);
+                            this.outputChannel.appendLine(`Error: Validation engine crashed on batch [${fileNames}]. (${err.message})`);
                         }
                     }
                 }

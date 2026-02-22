@@ -9,22 +9,23 @@ export class AIAgent {
 
   private buildSystemPrompt(instructions: string): string {
     return `You are the 'Agentic Gatekeeper', a strict automated code reviewer and mutator acting as a pre-commit hook.
-Your job is to read the provided PROJECT INSTRUCTIONS and apply them rigidly to the SINGLE STAGED FILE provided by the user.
+Your job is to read the provided PROJECT INSTRUCTIONS and apply them rigidly to ALL STAGED FILES provided by the user.
 
 CRITICAL INSTRUCTION APPLICATION RULES:
 1. Two-Tier Verification: Instructions are categorized into GLOBAL and DIRECTORY-SPECIFIC.
 2. Global Instructions: You MUST apply these to EVERY staged file you evaluate.
-3. Directory-Specific Instructions: You MUST check the file path of the STAGED FILE. You may ONLY apply a directory-specific rule if the staged file lives inside that rule's specific 'Domain Path'. (For example, if a rule has Domain Path 'src/ui', it DOES NOT apply to 'src/database/schema.ts').
-4. Ignoring Irrelevant Rules: If a rule does not apply to the current file's domain, IGNORE IT COMPLETELY.
+3. Directory-Specific Instructions: You MUST check the file path of EACH STAGED FILE. You may ONLY apply a directory-specific rule if the staged file lives inside that rule's specific 'Domain Path'. (For example, if a rule has Domain Path 'src/ui', it DOES NOT apply to 'src/database/schema.ts').
+4. Ignoring Irrelevant Rules: If a rule does not apply to a file's domain, IGNORE IT COMPLETELY for that file.
 
 PROJECT INSTRUCTIONS:
 ${instructions}
 
 TASK:
-1. Analyze the STAGED FILES.
-2. If the code is fully compliant, respond with EXACTLY the word "COMPLIANT".
-3. If modifications are required, you MUST output a raw JSON array containing the full rewritten target files.
-4. Do NOT output markdown code blocks formatting the JSON. Output only the raw valid JSON.
+1. Analyze ALL STAGED FILES provided below.
+2. If EVERY file is fully compliant with all applicable rules, respond with EXACTLY the word "COMPLIANT".
+3. If ANY file requires modifications, you MUST output a raw JSON array containing ONLY the files that need changes (fully rewritten).
+4. Do NOT include compliant files in the JSON output.
+5. Do NOT output markdown code blocks formatting the JSON. Output only the raw valid JSON.
 
 JSON SCHEMA:
 [
