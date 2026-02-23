@@ -69,6 +69,28 @@ Addresses issues identified during post-implementation audit.
 ### WorkspacePatcher
 - **JSON Sanitization**: Implement a simple regex to strip trailing commas from AI-generated JSON before parsing, increasing resilience to common LLM formatting slips.
 
+## Phase 4: UI/UX Enhancements
+
+Improving visibility and accessibility of analysis results.
+
+### 1. Status Bar Indicator
+- **Goal**: Persistent visibility of Gatekeeper state.
+- **Logic**: 
+  - `Ready`: Shield icon + "Gatekeeper".
+  - `Analyzing`: Rotating icon + "Analyzing...".
+  - `Violations`: Warning icon + "[N] Issues found".
+
+### 2. Editor Title Integration
+- **Goal**: Quick-access button in the editor.
+- **Change**: Add `agentic-gatekeeper.analyzeStaged` to `editor/title` menu.
+
+### 3. Gatekeeper Side Bar (Tree View)
+- **Goal**: Structured view for violation reports instead of just raw text output.
+- **Components**:
+  - `ViolationProvider`: A TreeDataProvider that parses the last analysis result.
+  - `TreeView`: Registered under the SC (Source Control) container or a new "Gatekeeper" container.
+  - **Tree Nodes**: Files containing violations, with individual "Reasons" as child nodes.
+
 ## Verification Plan
 
 ### Automated Tests
