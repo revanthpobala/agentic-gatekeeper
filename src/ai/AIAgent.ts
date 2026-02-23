@@ -14,10 +14,10 @@ export class AIAgent {
 ${instructions}
 
 ### EXECUTION RULES:
-1. If all files are 100% compliant, respond with only the word: COMPLIANT
-2. If any file violates a rule, return a JSON array of objects for the fixes.
-3. Every fix MUST contain the "filePath" and the "newContent" (the full rewritten code for that file).
-4. Do not include any explanations or conversational text. Output only JSON or "COMPLIANT".
+1. If all files are 100% compliant with every rule above, respond with exactly one word: OK
+2. If any file violates a rule, return ONLY a JSON array of fix objects - no explanations, no prose.
+3. Every fix object MUST contain "filePath" (the relative path as provided) and "newContent" (the complete rewritten file contents - never a placeholder, summary, or status word).
+4. NEVER put a status word ("OK", "COMPLIANT", "PASS", or similar) as the value of "newContent". The "newContent" field must always be real file content.
 
 ### JSON FORMAT:
 [
@@ -35,6 +35,7 @@ ${instructions}
 
   /**
    * Headless validation using the injected AI provider.
+   * Retries up to 3 times with exponential backoff on transient failures.
    */
   public async analyze(
     instructions: string,
@@ -44,6 +45,26 @@ ${instructions}
   ): Promise<ProviderResult> {
     const systemPrompt = this.buildSystemPrompt(instructions, contextDepth);
     const userPrompt = this.buildUserPrompt(files);
-    return await provider.execute(systemPrompt, userPrompt);
+
+    const maxAttempts = 3;
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const result = await provider.execute(systemPrompt, userPrompt);
+        if (result.content !== null) { return result; }
+        // null content is not retryable - provider already showed an error
+        return result;
+      } catch (err: any) {
+        lastError = err;
+        const isTransient = /429|503|502|ECONNRESET|ETIMEDOUT|network|timeout/i.test(err?.message || '');
+        if (!isTransient || attempt === maxAttempts) { throw err; }
+        const delayMs = Math.pow(2, attempt) * 1000; // 2s, 4s
+        console.warn(`AIAgent: Attempt ${attempt} failed (${err.message}). Retrying in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+
+    throw lastError ?? new Error('AIAgent: All retry attempts exhausted.');
   }
 }

@@ -13,10 +13,10 @@ suite('AIAgent Integration Test Suite', () => {
         const mockInstructions = "Rule 1: No console.log";
         const prompt = buildSystemPrompt(mockInstructions);
 
-        // Ensure the prompt enforces the SINGLE FILE rule since our sequential update
-        assert.ok(prompt.includes('ALL STAGED FILES'), 'System prompt should define it is analyzing staged files');
+        // Ensure the prompt enforces the rule
+        assert.ok(prompt.includes('Agentic Gatekeeper'), 'System prompt should define its role');
         assert.ok(prompt.includes(mockInstructions), 'System prompt should inject the rules');
-        assert.ok(prompt.includes('JSON SCHEMA'), 'System prompt should define the exact JSON return structure');
+        assert.ok(prompt.includes('JSON FORMAT'), 'System prompt should define the exact JSON return structure');
     });
 
     test('analyze method handles compliant responses', async () => {
@@ -25,14 +25,14 @@ suite('AIAgent Integration Test Suite', () => {
         // Create a fake AI Provider that always says COMPLIANT
         const mockProvider: IProvider = {
             execute: async (systemPrompt: string, userPrompt: string): Promise<ProviderResult> => {
-                return { content: "   COMPLIANT   ", usage: { promptTokens: 100, completionTokens: 5, totalTokens: 105 }, model: 'mock-model' };
+                return { content: "   OK   ", usage: { promptTokens: 100, completionTokens: 5, totalTokens: 105 }, model: 'mock-model' };
             }
         };
 
         const mockFile = [{ filePath: 'sample-math.ts', content: 'export function add(a,b){return a+b;}' }];
         const result = await agent.analyze("Rules", mockFile, mockProvider);
 
-        assert.strictEqual(result.content?.trim(), "COMPLIANT");
+        assert.strictEqual(result.content?.trim(), "OK");
         assert.strictEqual(result.usage?.totalTokens, 105);
         assert.strictEqual(result.model, 'mock-model');
     });
@@ -65,14 +65,14 @@ suite('AIAgent Integration Test Suite', () => {
 
         const mockProvider: IProvider = {
             execute: async (): Promise<ProviderResult> => {
-                return { content: "COMPLIANT", usage: null, model: 'native-ide' };
+                return { content: "OK", usage: null, model: 'native-ide' };
             }
         };
 
         const mockFile = [{ filePath: 'test.ts', content: 'const x = 1;' }];
         const result = await agent.analyze("Rules", mockFile, mockProvider);
 
-        assert.strictEqual(result.content, "COMPLIANT");
+        assert.strictEqual(result.content, "OK");
         assert.strictEqual(result.usage, null);
     });
 });

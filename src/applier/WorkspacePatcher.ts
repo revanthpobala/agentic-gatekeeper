@@ -13,101 +13,167 @@ export class WorkspacePatcher {
         this.workspaceRoot = workspaceRoot;
     }
 
-    /**
-     * Attempts to parse a JSON block from the LLM containing { "filePath": "...", "newContent": "..." }
-     */
     public parseAIResponse(response: string): FileChange[] {
-        try {
-            // Improved extraction: Handle markdown JSON blocks if present
-            const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || response.match(/\[\s*\{[\s\S]*\}\s*\]/);
-            const jsonText = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : null;
+        const raw = response.trim()
+        const attempt1 = this.tryParseFileChanges(raw);
+        if (attempt1) { return this.filterChanges(attempt1) }
 
-            if (jsonText) {
-                const parsed = JSON.parse(jsonText.trim()) as FileChange[];
-
-                // Safety Check: Reject changes that contain placeholder text or "junk" patterns
-                const filtered = parsed.filter(change => {
-                    const content = change.newContent.trim();
-                    const lowerContent = content.toLowerCase();
-
-                    const junkPatterns = [
-                        "full_rewritten_file_content_with_all_fixes",
-                        "... (actual rewritten file content) ...",
-                        "// ... existing code ...",
-                        "// existing code here",
-                        "// same as before",
-                        "// same as original",
-                        "/* ... */",
-                        "same as above",
-                        "compliant" // AI sometimes outputs this inside JSON
-                    ];
-
-                    // Specific check for "COMPLIANT" as the entire content
-                    if (lowerContent === "compliant") {
-                        console.error(`Patcher: REJECTED change for ${change.filePath} because content is just 'COMPLIANT'.`);
-                        vscode.window.showWarningMessage(`Agentic Gatekeeper: AI returned 'COMPLIANT' as file content for ${change.filePath}. Skipping.`);
-                        return false;
-                    }
-
-                    const detectedJunk = junkPatterns.find(pattern => lowerContent.includes(pattern));
-
-                    if (detectedJunk) {
-                        console.error(`Patcher: REJECTED change for ${change.filePath} because it contains junk/placeholder: "${detectedJunk}"`);
-                        vscode.window.showWarningMessage(`Agentic Gatekeeper: AI returned junk/placeholder for ${change.filePath}. Skipping fixing to protect your code.`);
-                        return false;
-                    }
-                    return true;
-                });
-
-                console.log(`Patcher Successfully Extracted JSON: ${filtered.length} valid changes.`);
-                return filtered;
-            } else {
-                console.error("Patcher: No JSON array match found in response:", response);
+        const fenceMatch = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+        if (fenceMatch) {
+            const attempt2 = this.tryParseFileChanges(fenceMatch[1].trim());
+            if (attempt2) {
+                return this.filterChanges(attempt2);
             }
-        } catch (error) {
-            console.error("Failed to parse AI response into FileChanges", error);
-            console.error("Raw Response was:", response);
         }
+
+        const firstBracket = raw.indexOf('[');
+        const lastBracket = raw.lastIndexOf(']');
+
+        if (firstBracket !== -1 && lastBracket > firstBracket) {
+            const attempt3 = this.tryParseFileChanges(raw.slice(firstBracket, lastBracket + 1));
+            if (attempt3) { return this.filterChanges(attempt3); }
+        }
+
+        console.error('Patcher: No valid JSON array found in response:', raw);
         return [];
+
+    }
+
+    private tryParseFileChanges(text: string): FileChange[] | null {
+        try {
+            const parsed = JSON.parse(text);
+            if (!Array.isArray(parsed)) { return null; }
+            // Validate shape of each element
+            const valid = parsed.filter(
+                (item): item is FileChange =>
+                    typeof item === 'object' &&
+                    item !== null &&
+                    typeof item.filePath === 'string' &&
+                    item.filePath.length > 0 &&
+                    typeof item.newContent === 'string'
+            );
+            return valid.length > 0 ? valid : null;
+        } catch {
+            return null;
+        }
+    }
+
+    private filterChanges(changes: FileChange[]): FileChange[] {
+        const junkPatterns = [
+            'full_rewritten_file_content_with_all_fixes',
+            '... (actual rewritten file content) ...',
+            '// ... existing code ...',
+            '// existing code here',
+            '// same as before',
+            '// same as original',
+            '/* ... */',
+            'same as above',
+        ];
+
+        return changes.filter(change => {
+            const content = change.newContent.trim();
+            const lowerContent = content.toLowerCase();
+
+            // Reject single-word/short status responses
+            if (/^(ok|compliant|pass|done|fixed|no\s+violations?)$/i.test(content)) {
+                console.error(`Patcher: REJECTED ${change.filePath} - content is a status word.`);
+                vscode.window.showWarningMessage(
+                    `Agentic Gatekeeper: AI returned a status word as file content for ${change.filePath}. Skipping.`
+                );
+                return false;
+            }
+
+            const detectedJunk = junkPatterns.find(p => lowerContent.includes(p));
+            if (detectedJunk) {
+                console.error(`Patcher: REJECTED ${change.filePath} - contains placeholder: "${detectedJunk}"`);
+                vscode.window.showWarningMessage(
+                    `Agentic Gatekeeper: AI returned a placeholder for ${change.filePath}. Skipping to protect your code.`
+                );
+                return false;
+            }
+
+            return true;
+        });
     }
 
     /**
-     * Automatically applies full file rewrites to the workspace atomically.
+     * Applies full file rewrites to the workspace atomically.
+     * Warns if any targeted file has unsaved changes before proceeding.
      */
     public async applyChanges(changes: FileChange[]): Promise<boolean> {
         if (changes.length === 0) { return false; }
 
-        const edit = new vscode.WorkspaceEdit();
-
+        // Resolve and validate all paths upfront
+        const resolvedChanges: { change: FileChange; uri: vscode.Uri }[] = [];
         for (const change of changes) {
-            console.log(`Patcher: Attempting to patch file URI: ${change.filePath}`);
-            const fileUri = vscode.Uri.file(path.join(this.workspaceRoot, change.filePath));
+            const resolvedPath = path.resolve(this.workspaceRoot, change.filePath);
+            if (!resolvedPath.startsWith(this.workspaceRoot + path.sep) && resolvedPath !== this.workspaceRoot) {
+                console.error(`Patcher: BLOCKED path traversal: ${change.filePath}`);
+                vscode.window.showWarningMessage(`Agentic Gatekeeper: Blocked unsafe path from AI: ${change.filePath}`);
+                continue;
+            }
+            resolvedChanges.push({ change, uri: vscode.Uri.file(resolvedPath) });
+        }
 
-            try {
-                const document = await vscode.workspace.openTextDocument(fileUri);
-                const fullRange = new vscode.Range(
-                    document.positionAt(0),
-                    document.positionAt(document.getText().length)
-                );
-                edit.replace(fileUri, fullRange, change.newContent);
-                console.log(`Patcher: Set edit.replace for ${change.filePath}`);
-            } catch (err) {
-                // Handle new file creation
-                console.warn(`Patcher: File did not exist natively, creating: ${change.filePath}`);
-                edit.createFile(fileUri, { ignoreIfExists: true });
-                edit.insert(fileUri, new vscode.Position(0, 0), change.newContent);
+        if (resolvedChanges.length === 0) { return false; }
+
+        // Warn if any file has unsaved changes
+        const dirtyFiles = resolvedChanges.filter(({ uri }) => {
+            const openDoc = vscode.workspace.textDocuments.find(
+                (doc: vscode.TextDocument) => doc.uri.fsPath === uri.fsPath && doc.isDirty
+            );
+            return !!openDoc;
+        });
+
+        if (dirtyFiles.length > 0) {
+            const filenames = dirtyFiles.map(f => f.change.filePath).join(', ');
+            const choice = await vscode.window.showWarningMessage(
+                `Agentic Gatekeeper: ${dirtyFiles.length} file(s) have unsaved changes and will be overwritten: ${filenames}. Proceed?`,
+                'Overwrite', 'Cancel'
+            );
+            if (choice !== 'Overwrite') {
+                this.logChannel('Patch cancelled - unsaved changes would be overwritten.');
+                return false;
             }
         }
 
-        // Apply all modifications as a single atomic transaction
+        const edit = new vscode.WorkspaceEdit();
+
+        for (const { change, uri } of resolvedChanges) {
+            // Check if the file already exists
+            let fileExists = true;
+            try {
+                await vscode.workspace.fs.stat(uri);
+            } catch {
+                fileExists = false;
+            }
+
+            if (fileExists) {
+                try {
+                    const document = await vscode.workspace.openTextDocument(uri);
+                    const fullRange = new vscode.Range(
+                        document.positionAt(0),
+                        document.positionAt(document.getText().length)
+                    );
+                    edit.replace(uri, fullRange, change.newContent);
+                } catch (err) {
+                    console.error(`Patcher: Cannot open ${change.filePath}`, err);
+                    vscode.window.showWarningMessage(
+                        `Agentic Gatekeeper: Cannot patch ${change.filePath} - file is inaccessible. Skipping.`
+                    );
+                }
+            } else {
+                edit.createFile(uri, { ignoreIfExists: false });
+                edit.insert(uri, new vscode.Position(0, 0), change.newContent);
+            }
+        }
+
         const success = await vscode.workspace.applyEdit(edit);
 
         if (success) {
-            // Save all affected documents to ensure they are ready for git staging
-            for (const change of changes) {
+            for (const { change, uri } of resolvedChanges) {
                 try {
-                    const fileUri = vscode.Uri.file(path.join(this.workspaceRoot, change.filePath));
-                    const document = await vscode.workspace.openTextDocument(fileUri);
+                    const document = await vscode.workspace.openTextDocument(uri);
                     await document.save();
                 } catch (e) {
                     console.error(`Patcher: Failed to save ${change.filePath}`, e);
@@ -116,5 +182,9 @@ export class WorkspacePatcher {
         }
 
         return success;
+    }
+
+    private logChannel(msg: string) {
+        console.log(`[WorkspacePatcher] ${msg}`);
     }
 }

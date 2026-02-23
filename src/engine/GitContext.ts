@@ -25,6 +25,10 @@ export class GitContext {
      */
     public async getStagedFiles(): Promise<string[]> {
         try {
+            const isRepo = await this.git.checkIsRepo();
+            if (!isRepo) {
+                vscode.window.showErrorMessage('Agentic Gatekeeper: The current workspace is not a Git repository.');
+            }
             const status = await this.getStatus();
             return status.staged;
         } catch (error) {

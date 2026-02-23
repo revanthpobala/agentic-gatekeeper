@@ -17,9 +17,10 @@ suite('BatchProcessor Test Suite', () => {
         ];
         const constraints: BatchConstraints = {
             maxTokensPerBatch: 1000,
-            instructionTokens: 100
+            instructionTokens: 100,
+            safetyBuffer: 0
         };
-        const batches = groupIntoBatches(files, constraints);
+        const { batches } = groupIntoBatches(files, constraints);
         assert.strictEqual(batches.length, 1);
         assert.strictEqual(batches[0].length, 2);
     });
@@ -37,7 +38,7 @@ suite('BatchProcessor Test Suite', () => {
         // Effective budget = 300 - 50 - 10 = 240 tokens.
         // File 1 tokens = 100 + 8 (path) + 50 (delim) = 158 tokens.
         // Adding File 2 (158 tokens) would exceed 240.
-        const batches = groupIntoBatches(files, constraints);
+        const { batches } = groupIntoBatches(files, constraints);
         assert.strictEqual(batches.length, 2);
         assert.strictEqual(batches[0][0].filePath, 'file1.ts');
         assert.strictEqual(batches[1][0].filePath, 'file2.ts');
@@ -47,22 +48,27 @@ suite('BatchProcessor Test Suite', () => {
         const files: FileContext[] = [{ filePath: 'f.ts', content: 'c' }];
         const constraints: BatchConstraints = {
             maxTokensPerBatch: 100,
-            instructionTokens: 150
+            instructionTokens: 150,
+            safetyBuffer: 0
         };
         assert.throws(() => groupIntoBatches(files, constraints), /Instruction size/);
     });
 
-    test('groupIntoBatches: should throw error if a single file exceeds budget', () => {
+    test('groupIntoBatches: should skip a single file if it exceeds budget', () => {
         const files: FileContext[] = [{ filePath: 'huge.ts', content: 'a'.repeat(4000) }]; // ~1000 tokens
         const constraints: BatchConstraints = {
             maxTokensPerBatch: 500,
-            instructionTokens: 50
+            instructionTokens: 50,
+            safetyBuffer: 0
         };
-        assert.throws(() => groupIntoBatches(files, constraints), /too large/);
+        const { batches, skipped } = groupIntoBatches(files, constraints);
+        assert.strictEqual(batches.length, 0);
+        assert.strictEqual(skipped.length, 1);
+        assert.strictEqual(skipped[0], 'huge.ts');
     });
 
     test('groupIntoBatches: should handle empty file list', () => {
-        const batches = groupIntoBatches([], { maxTokensPerBatch: 1000, instructionTokens: 100 });
+        const { batches } = groupIntoBatches([], { maxTokensPerBatch: 1000, instructionTokens: 100, safetyBuffer: 0 });
         assert.strictEqual(batches.length, 0);
     });
 });

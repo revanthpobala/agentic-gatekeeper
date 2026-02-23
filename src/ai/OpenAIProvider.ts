@@ -3,28 +3,25 @@ import OpenAI from 'openai';
 import { IProvider, ProviderResult } from './IProvider';
 
 export class OpenAIProvider implements IProvider {
-    private openai: OpenAI;
+    private apiKey: string;
     private model: string;
 
-    constructor(providedKey?: string) {
-        // Read configuration from VS Code Settings
+    constructor(apiKey?: string) {
         const config = vscode.workspace.getConfiguration('agenticGatekeeper');
-        const defaultKey = config.get<string>('openaiApiKey');
-        const apiKey = providedKey || defaultKey;
-        this.model = config.get<string>('openaiModel') || 'gpt-4o';
-
-        if (!apiKey) {
-            vscode.window.showErrorMessage('Agentic Gatekeeper: OpenAI API Key is missing. Please configure it in settings.');
-        }
-
-        this.openai = new OpenAI({
-            apiKey: apiKey || 'MISSING_KEY'
-        });
+        this.apiKey = apiKey || '';
+        this.model = config.get<string>('openai.model') || 'gpt-4o';
     }
 
     public async execute(systemPrompt: string, userPrompt: string): Promise<ProviderResult> {
+        if (!this.apiKey) {
+            vscode.window.showErrorMessage('Agentic Gatekeeper: OpenAI API Key is missing. Please configure it in settings.');
+            return { content: null, usage: null, model: this.model };
+        }
+
+        const openai = new OpenAI({ apiKey: this.apiKey });
+
         try {
-            const response = await this.openai.chat.completions.create({
+            const response = await openai.chat.completions.create({
                 model: this.model,
                 messages: [
                     { role: "system", content: systemPrompt },
@@ -44,7 +41,7 @@ export class OpenAIProvider implements IProvider {
 
         } catch (error: any) {
             console.error('OpenAI API Error:', error);
-            vscode.window.showErrorMessage(`Agentic Gatekeeper: AI Provider Error - ${error.message}`);
+            vscode.window.showErrorMessage(`Agentic Gatekeeper: OpenAI Error - ${error.message}`);
             return { content: null, usage: null, model: this.model };
         }
     }

@@ -17,10 +17,15 @@ export interface BatchConstraints {
  * Groups files into batches that fit within the token budget.
  * Accounts for instruction overhead and enforces a strict cutoff.
  */
+export interface BatchResult {
+    batches: FileContext[][];
+    skipped: string[];
+}
+
 export function groupIntoBatches(
     files: FileContext[],
     constraints: BatchConstraints
-): FileContext[][] {
+): BatchResult {
     const { maxTokensPerBatch, instructionTokens } = constraints;
     const safetyBuffer = constraints.safetyBuffer ?? 2000;
 
@@ -36,15 +41,15 @@ export function groupIntoBatches(
     }
 
     let currentTokens = 0;
+    const skipped: string[] = [];
 
     for (const file of files) {
         const fileTokens = estimateTokens(file.content) + estimateTokens(file.filePath) + 50; // 50 for delimiters
 
         // If a single file + instructions exceeds the budget, it's a fatal error for that file
         if (fileTokens > effectiveBudget) {
-            // We'll throw an error for now to be strict. 
-            // In the future we might want to skip the file but continue other batches.
-            throw new Error(`File '${file.filePath}' is too large (${fileTokens} tokens). With instructions, it exceeds the batch limit of ${maxTokensPerBatch} tokens.`);
+            skipped.push(file.filePath);
+            continue;
         }
 
         // If adding this file would exceed the batch budget, move to a new batch
@@ -62,5 +67,5 @@ export function groupIntoBatches(
         batches.push(currentBatch);
     }
 
-    return batches;
+    return { batches, skipped };
 }
