@@ -101,7 +101,7 @@ export class GatekeeperEngine {
                 }
 
                 const markdownParser = new MarkdownParser(this.workspaceRoot, this.outputChannel);
-                const patcher = new WorkspacePatcher(this.workspaceRoot);
+                const patcher = new WorkspacePatcher(this.workspaceRoot, this.outputChannel);
                 const orchestrator = new AIAgent();
                 const config = vscode.workspace.getConfiguration('agenticGatekeeper');
                 const isDryRun = config.get<boolean>('dryRun') === true;

@@ -82,6 +82,10 @@
       {
         "command": "agentic-gatekeeper.setupInstructions",
         "title": "Agentic Gatekeeper: Create Agentic Rules Folder"
+      },
+      {
+        "command": "agentic-gatekeeper.clearCache",
+        "title": "Agentic Gatekeeper: Clear Analysis Cache"
       }
     ],
     "menus": {
@@ -90,6 +94,11 @@
           "command": "agentic-gatekeeper.analyzeStaged",
           "when": "scmProvider == git",
           "group": "navigation"
+        },
+        {
+          "command": "agentic-gatekeeper.clearCache",
+          "when": "scmProvider == git",
+          "group": "navigation@2"
         }
       ]
     },

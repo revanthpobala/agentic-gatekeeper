@@ -9,9 +9,11 @@ export interface FileChange {
 
 export class WorkspacePatcher {
     private workspaceRoot: string;
+    private outputChannel?: vscode.OutputChannel;
 
-    constructor(workspaceRoot: string) {
+    constructor(workspaceRoot: string, outputChannel?: vscode.OutputChannel) {
         this.workspaceRoot = workspaceRoot;
+        this.outputChannel = outputChannel;
     }
 
     public parseAIResponse(response: string): FileChange[] {
@@ -35,7 +37,7 @@ export class WorkspacePatcher {
             if (attempt3) { return this.filterChanges(attempt3); }
         }
 
-        console.error('Patcher: No valid JSON array found in response:', raw);
+        this.logChannel(`No valid JSON array found in response: ${raw.slice(0, 50)}...`);
         return [];
 
     }
@@ -83,7 +85,7 @@ export class WorkspacePatcher {
 
             // Reject single-word/short status responses using accurate regex
             if (/^(ok|fixed|compliant|pass|done|no\s+violations?)$/i.test(content)) {
-                console.error(`Patcher: REJECTED ${change.filePath} - content is a status word.`);
+                this.logChannel(`REJECTED ${change.filePath} - content is a status word.`);
                 vscode.window.showWarningMessage(
                     `Agentic Gatekeeper: AI returned a status word ("${content}") as file content for ${change.filePath}. Skipping.`
                 );
@@ -92,7 +94,7 @@ export class WorkspacePatcher {
 
             const detectedJunk = junkPatterns.find(p => lowerContent.includes(p));
             if (detectedJunk) {
-                console.error(`Patcher: REJECTED ${change.filePath} - contains placeholder: "${detectedJunk}"`);
+                this.logChannel(`REJECTED ${change.filePath} - contains placeholder: "${detectedJunk}"`);
                 vscode.window.showWarningMessage(
                     `Agentic Gatekeeper: AI returned a placeholder for ${change.filePath}. Skipping to protect your code.`
                 );
@@ -115,7 +117,7 @@ export class WorkspacePatcher {
         for (const change of changes) {
             const resolvedPath = path.resolve(this.workspaceRoot, change.filePath);
             if (!resolvedPath.startsWith(this.workspaceRoot)) {
-                console.error(`Patcher: BLOCKED path traversal: ${change.filePath}`);
+                this.logChannel(`BLOCKED path traversal attempt: ${change.filePath}`);
                 vscode.window.showWarningMessage(`Agentic Gatekeeper: Blocked unsafe path from AI: ${change.filePath}`);
                 continue;
             }
@@ -164,7 +166,7 @@ export class WorkspacePatcher {
                     );
                     edit.replace(uri, fullRange, change.newContent);
                 } catch (err) {
-                    console.error(`Patcher: Cannot open ${change.filePath}`, err);
+                    this.logChannel(`Cannot open ${change.filePath}: ${err}`);
                     vscode.window.showWarningMessage(
                         `Agentic Gatekeeper: Cannot patch ${change.filePath} - file is inaccessible. Skipping.`
                     );
@@ -183,7 +185,7 @@ export class WorkspacePatcher {
                     const document = await vscode.workspace.openTextDocument(uri);
                     await document.save();
                 } catch (e) {
-                    console.error(`Patcher: Failed to save ${change.filePath}`, e);
+                    this.logChannel(`Failed to save ${change.filePath}: ${e}`);
                 }
             }
         }
@@ -192,6 +194,7 @@ export class WorkspacePatcher {
     }
 
     private logChannel(msg: string) {
+        this.outputChannel?.appendLine(`[Patcher] ${msg}`);
         console.log(`[WorkspacePatcher] ${msg}`);
     }
 }
