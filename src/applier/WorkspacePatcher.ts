@@ -329,6 +329,13 @@ export class WorkspacePatcher {
             if (fileExists) {
                 try {
                     const document = await vscode.workspace.openTextDocument(uri);
+                    const originalText = document.getText();
+
+                    // Reject no-op rewrites (identical content modulo whitespace)
+                    if (change.newContent.trim() === originalText.trim()) {
+                        this.logChannel(`REJECTED ${change.filePath} rewrite - content is identical to original (no-op).`);
+                        continue;
+                    }
 
                     // Size Guardrail for Full Rewrites
                     const originalLength = document.getText().length;
@@ -455,6 +462,25 @@ export class WorkspacePatcher {
             }
 
             if (allMatchesSafe && validatedEdits.length > 0) {
+                let simulatedText = originalText;
+                // Apply edits in reverse order to preserve positions
+                const sortedEdits = [...validatedEdits].sort((a, b) =>
+                    b.range.start.compareTo(a.range.start)
+                );
+                for (const ve of sortedEdits) {
+                    const startOff = document.offsetAt(ve.range.start);
+                    const endOff = document.offsetAt(ve.range.end);
+                    simulatedText = simulatedText.slice(0, startOff) + ve.newText + simulatedText.slice(endOff);
+                }
+
+                if (originalText.length > 0 && simulatedText.trim().length < (originalText.length * 0.50)) {
+                    this.logChannel(`REJECTED all patches for ${filePatch.filePath} - result is ${simulatedText.length} chars vs original ${originalText.length} chars (>50% reduction). Possible destructive patch.`);
+                    vscode.window.showWarningMessage(
+                        `Agentic Gatekeeper: Rejected patches for ${filePatch.filePath} - the patched file would be >50% smaller than the original.`
+                    );
+                    continue;
+                }
+
                 for (const validatedEdit of validatedEdits) {
                     edit.replace(uri, validatedEdit.range, validatedEdit.newText);
                 }

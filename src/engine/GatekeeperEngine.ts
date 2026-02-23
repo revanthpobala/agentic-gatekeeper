@@ -9,6 +9,7 @@ import { AIProviderFactory } from '../ai/AIProviderFactory';
 import { ProviderResult, TokenUsage } from '../ai/IProvider';
 import { groupIntoBatches, estimateTokens } from './BatchProcessor';
 import * as crypto from 'crypto';
+import { minimatch } from 'minimatch';
 
 // Pricing per 1M tokens (input / output) in USD
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
@@ -105,6 +106,7 @@ export class GatekeeperEngine {
                 const orchestrator = new AIAgent();
                 const config = vscode.workspace.getConfiguration('agenticGatekeeper');
                 const isDryRun = config.get<boolean>('dryRun') === true;
+                const userExcludes = config.get<string[]>('excludePatterns') || [];
 
                 // 1. Audit Rules
                 progress.report({ message: "Discovering rules..." });
@@ -123,6 +125,9 @@ export class GatekeeperEngine {
                 }
 
                 const instructions = await markdownParser.getConsolidatedInstructions(rules);
+                const ruleGlobs = rules
+                    .map(r => r.globs)
+                    .filter((g): g is string => !!g);
 
                 // 2. AI Orchestration (Moved up for caching)
                 const { provider, modeName } = AIProviderFactory.createProvider(this.outputChannel);
@@ -165,13 +170,28 @@ export class GatekeeperEngine {
                     const basename = path.basename(relativePath);
                     const ext = path.extname(relativePath).toLowerCase();
 
-                    const shouldSkip = skipPrefixes.some(p => relativePath.startsWith(p)) ||
+                    const matchesUserExclude = userExcludes.some(pattern =>
+                        minimatch(relativePath, pattern, { matchBase: true, dot: true })
+                    );
+
+                    let shouldSkip = skipPrefixes.some(p => relativePath.startsWith(p)) ||
                         skipExact.includes(relativePath) ||
                         relativePath.endsWith('-gatekeeper.md') ||
                         relativePath.endsWith('-instructions.md') ||
                         skipFilenames.includes(basename) ||
                         skipExtensions.some(e => relativePath.endsWith(e)) ||
-                        ext === '' && basename.startsWith('.'); // dotfiles with no extension
+                        (ext === '' && basename.startsWith('.')) || // dotfiles with no extension
+                        matchesUserExclude;
+
+                    // If rules have globs defined, skip files that don't match any
+                    if (!shouldSkip && ruleGlobs.length > 0) {
+                        const matchesAnyGlob = ruleGlobs.some(glob =>
+                            glob.split(',').some(g => minimatch(relativePath, g.trim(), { matchBase: true }))
+                        );
+                        if (!matchesAnyGlob) {
+                            shouldSkip = true;
+                        }
+                    }
 
                     if (shouldSkip) {
                         this.outputChannel.appendLine(`  [Skipped] ${relativePath}`);

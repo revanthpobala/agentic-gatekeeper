@@ -249,6 +249,14 @@
             "ARCHITECTURE.md"
           ],
           "description": "Glob patterns for Markdown instruction files the Gatekeeper should enforce. Supports wildcards (e.g., 'docs/rules/*.md')."
+        },
+        "agenticGatekeeper.excludePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Glob patterns for files/directories to exclude from analysis (e.g., 'scripts/**', 'vendor/**', '*.test.go'). These are in addition to the built-in skip list."
         }
       }
     }
