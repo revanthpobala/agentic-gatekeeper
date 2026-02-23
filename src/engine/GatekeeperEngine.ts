@@ -225,6 +225,7 @@ export class GatekeeperEngine {
                 const instructionTokens = estimateTokens(instructions);
 
                 // Smart batching: group files to minimize redundant rule token duplication
+                fileContexts.sort((a, b) => (a.lineCount ?? 0) - (b.lineCount ?? 0));
                 let batches: FileContext[][] = [];
                 try {
                     const batchResult = groupIntoBatches(fileContexts, {
@@ -364,17 +365,11 @@ export class GatekeeperEngine {
                             }
 
                             if (!parsedValid) {
-                                // If it's not "OK" but returned empty JSON, it means the model thinks it's compliant 
-                                // but missed the magic word. We'll treat it as compliant and cache it.
-                                for (const f of batch) {
-                                    this.outputChannel.appendLine(`  -> ${f.filePath} is Compliant.`);
-                                    // Store in cache
-                                    this.workspaceState.update(`gatekeeper:cache:${f.filePath}`, {
-                                        contentHash: f.contentHash,
-                                        rulesHash: instructionsHash,
-                                        result: "OK"
-                                    });
-                                }
+                                const fileNames = batch.map(f => f.filePath).join(', ');
+                                this.outputChannel.appendLine(
+                                    `  -> Ambiguous response for batch [${fileNames}] - not "OK" and no valid patches. Skipping cache to force re-analysis.`
+                                );
+                                this.outputChannel.appendLine(`Report:\n${result.content}`);
                             }
                         } else {
                             for (const f of batch) {
@@ -420,13 +415,13 @@ export class GatekeeperEngine {
                             }
 
                             if (result.content.trim().toUpperCase() !== "OK") {
-                                hasViolations = true;
                                 let parsedValid = false;
 
                                 if (batchMode === 'patch') {
                                     const patches = patcher.parseAIPatchResponse(result.content);
                                     const validPatches = patcher.filterPatches(patches);
                                     if (validPatches && validPatches.length > 0) {
+                                        hasViolations = true;
                                         parsedValid = true;
                                         allPatches.push(...validPatches);
                                         for (const p of validPatches) {
@@ -447,6 +442,7 @@ export class GatekeeperEngine {
                                 } else {
                                     const changes = patcher.parseAIResponse(result.content);
                                     if (changes && changes.length > 0) {
+                                        hasViolations = true;
                                         parsedValid = true;
                                         allChanges.push(...changes);
                                         for (const change of changes) {

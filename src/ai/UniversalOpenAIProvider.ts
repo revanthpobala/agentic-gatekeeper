@@ -61,8 +61,7 @@ export class UniversalOpenAIProvider implements IProvider {
 
         } catch (error: any) {
             console.error('Custom API Error:', error);
-            vscode.window.showErrorMessage(`Agentic Gatekeeper: Custom AI Provider Error - ${error.message}`);
-            return { content: null, usage: null, model: this.model };
+            throw error;
         }
     }
 }

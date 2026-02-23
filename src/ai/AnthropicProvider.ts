@@ -27,7 +27,7 @@ export class AnthropicProvider implements IProvider {
                 },
                 body: JSON.stringify({
                     model: this.model,
-                    max_tokens: 4096,
+                    max_tokens: 8192,
                     temperature: 0.1, // Low temperature for deterministic output
                     system: systemPrompt,
                     messages: [

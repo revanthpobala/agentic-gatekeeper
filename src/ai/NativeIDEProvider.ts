@@ -94,21 +94,26 @@ export class NativeIDEProvider implements IProvider {
                 vscode.LanguageModelChatMessage.User(`System Instruction:\n${systemPrompt}\n\nUser Request:\n${userPrompt}`)
             ];
 
-            const chatResponse = await chatModel.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
+            const cts = new vscode.CancellationTokenSource();
+            try {
+                const chatResponse = await chatModel.sendRequest(messages, {}, cts.token);
 
-            let fullResponse = '';
-            for await (const chunk of chatResponse.text) {
-                fullResponse += chunk;
+                let fullResponse = '';
+                for await (const chunk of chatResponse.text) {
+                    fullResponse += chunk;
+                }
+
+                this.log(`Response received. Length: ${fullResponse.length} chars`);
+
+                if (fullResponse.length === 0) {
+                    this.log('WARNING: Model returned an empty string response.');
+                }
+
+                // Native IDE API does not expose token usage
+                return { content: fullResponse || null, usage: null, model: chatModel.id };
+            } finally {
+                cts.dispose();
             }
-
-            this.log(`Response received. Length: ${fullResponse.length} chars`);
-
-            if (fullResponse.length === 0) {
-                this.log('WARNING: Model returned an empty string response.');
-            }
-
-            // Native IDE API does not expose token usage
-            return { content: fullResponse || null, usage: null, model: chatModel.id };
 
         } catch (error: any) {
             const errMsg = error?.message || String(error);
@@ -123,10 +128,11 @@ export class NativeIDEProvider implements IProvider {
             // Check for consent-related errors
             if (errMsg.includes('consent') || errMsg.includes('permission') || errMsg.includes('access')) {
                 this.log('This looks like a consent/permission issue. The user may need to approve LM access for this extension.');
+                vscode.window.showErrorMessage(`Agentic Gatekeeper: Native AI Error - ${errMsg}`);
+                return { content: null, usage: null, model: 'native-ide' };
             }
 
-            vscode.window.showErrorMessage(`Agentic Gatekeeper: Native AI Error - ${errMsg}`);
-            return { content: null, usage: null, model: 'native-ide' };
+            throw error;
         }
     }
 }

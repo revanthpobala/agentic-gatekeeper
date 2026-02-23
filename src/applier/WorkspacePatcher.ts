@@ -54,6 +54,14 @@ export class WorkspacePatcher {
 
     public parseAIPatchResponse(response: string): FilePatch[] {
         const raw = response.trim();
+
+        // Check for explicit empty array (model says "no patches needed")
+        const stripped = raw.replace(/```(?:json)?\s*\n?|\n?\s*```/g, '').trim();
+        if (stripped === '[]') {
+            this.logChannel(`AI returned empty patch array [] - treating as "no patches found" (will NOT be cached).`);
+            return [];
+        }
+
         const attempt1 = this.tryParseFilePatches(raw);
         if (attempt1) { return attempt1; } // Filtering happens in engine or later
 
