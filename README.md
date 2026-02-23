@@ -49,6 +49,23 @@ The Agentic Gatekeeper recursively scans your workspace for Markdown files that 
 - **Auto-Fix Compliance**: Natively patches non-compliant code using VS Code workspace edits.
 - **Infinite Versatility**: If you can write it in plain English markdown, the Agentic Gatekeeper can enforce it.
 
+## Ignoring Files
+
+The Gatekeeper allows you to exclude specific files or directories from analysis using two methods:
+
+### 1. `.gatekeeperignore` (Recommended)
+Create a `.gatekeeperignore` file in your workspace root. It supports standard glob patterns and comments:
+```ignore
+# Ignore generated code
+**/generated/*.ts
+
+# Ignore high-churn legacy files
+legacy/utils.js
+```
+
+### 2. VS Code Settings
+You can also define a global exclusion list in your settings under `agenticGatekeeper.excludePatterns`.
+
 ## Configuration & API Keys
 
 The Agentic Gatekeeper requires an LLM backend to function. By default, it uses the **Native IDE Model** (Copilot/Gemini, if signed in). However, for maximum capability, you should configure an external provider.
