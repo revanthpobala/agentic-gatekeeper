@@ -344,7 +344,13 @@ export class WorkspacePatcher {
                         document.positionAt(0),
                         document.positionAt(originalLength)
                     );
-                    edit.replace(uri, fullRange, change.newContent);
+
+                    let cleanReplace = change.newContent;
+                    if (/^```[a-zA-Z]*\s*\n/.test(cleanReplace) && /\n\s*```$/.test(cleanReplace)) {
+                        cleanReplace = cleanReplace.replace(/^```[a-zA-Z]*\s*\n/, '').replace(/\n\s*```$/, '');
+                    }
+
+                    edit.replace(uri, fullRange, cleanReplace);
                 } catch (err) {
                     this.logChannel(`Cannot open ${change.filePath}: ${err}`);
                     vscode.window.showWarningMessage(
@@ -429,9 +435,15 @@ export class WorkspacePatcher {
                 if (matchResult.startOriginal !== undefined && matchResult.endOriginal !== undefined) {
                     const startPos = document.positionAt(matchResult.startOriginal);
                     const endPos = document.positionAt(matchResult.endOriginal);
+                    // Strip accidental markdown fences that AI models often hallucinate inside JSON string values
+                    let cleanReplace = p.replace;
+                    if (/^```[a-zA-Z]*\s*\n/.test(cleanReplace) && /\n\s*```$/.test(cleanReplace)) {
+                        cleanReplace = cleanReplace.replace(/^```[a-zA-Z]*\s*\n/, '').replace(/\n\s*```$/, '');
+                    }
+
                     validatedEdits.push({
                         range: new vscode.Range(startPos, endPos),
-                        newText: p.replace
+                        newText: cleanReplace
                     });
                 } else {
                     allMatchesSafe = false;
