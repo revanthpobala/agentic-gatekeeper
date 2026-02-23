@@ -58,8 +58,10 @@ ${instructions}
 3. Every patch object MUST include a "reason" field explaining which rule was violated.
 4. Every patch object MUST contain "filePath" (the relative path as provided) and a "patches" array.
 5. In the "patches" array, each object must have "search" and "replace" fields.
-6. STRICT ANCHOR DIRECTIVE: Your "search" string MUST include at least 2 lines of unchanged surrounding context above and below the modified lines to ensure a unique match. Do NOT target generic single-line statements without surrounding context.
-7. NEVER put a status word ("OK", "COMPLIANT", "PASS", or similar) as the value of "replace". The "replace" field must always be the real replacement code.
+6. STRICT ANCHOR DIRECTIVE: Your "search" string MUST include at least 2 lines of unchanged surrounding context above and below the modified lines to ensure a unique match.
+7. EXACT MATCH DIRECTIVE: The "search" string MUST be an EXACT, VERBATIM copy from the original file. Do not invent, alter, or omit any whitespace, indentation, or comments.
+8. NEVER target generic single-line statements without surrounding context.
+9. NEVER put a status word ("OK", "COMPLIANT", "PASS", or similar) as the value of "replace". The "replace" field must always be the real replacement code.
 
 ### JSON FORMAT:
 [

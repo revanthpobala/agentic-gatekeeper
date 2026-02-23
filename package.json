@@ -98,7 +98,7 @@
         {
           "command": "agentic-gatekeeper.clearCache",
           "when": "scmProvider == git",
-          "group": "navigation@2"
+          "group": "1_gatekeeper"
         }
       ]
     },
@@ -155,10 +155,11 @@
           "type": "string",
           "enum": [
             "aggregated",
-            "continuous"
+            "continuous",
+            "streaming"
           ],
           "default": "aggregated",
-          "description": "Execution strategy: 'aggregated' audits everything first, then applies all fixes (safer). 'continuous' analyzes one batch and applies fixes immediately before moving to the next (best for very large sets or unreliable local LLMs)."
+          "description": "Execution strategy: 'aggregated' audits everything first, then applies fixes (safer). 'streaming' runs concurrently but applies fixes as each resolves (fastest for large reps). 'continuous' analyzes one batch, applies, then starts the next (safest for local LLMs)."
         },
         "agenticGatekeeper.dryRun": {
           "type": "boolean",

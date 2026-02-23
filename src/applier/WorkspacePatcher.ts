@@ -262,7 +262,30 @@ export class WorkspacePatcher {
 
         if (searchNorm.length === 0) return { found: false, isAmbiguous: false };
 
-        const firstIdx = docNorm.indexOf(searchNorm);
+        let firstIdx = docNorm.indexOf(searchNorm);
+        let matchLength = searchNorm.length;
+
+        if (firstIdx === -1) {
+            // Fallback: Fuzzy approximate substring matching
+            const maxDistance = Math.max(2, Math.floor(searchNorm.length * 0.05));
+            const bestSub = this.findBestFuzzySubstring(docNorm, searchNorm, maxDistance);
+
+            if (bestSub.distance <= maxDistance && bestSub.endIndex !== -1) {
+                // To find the exact start, search backwards from endIndex
+                const textSubset = docNorm.substring(Math.max(0, bestSub.endIndex - searchNorm.length - maxDistance), bestSub.endIndex + 1);
+
+                const revText = textSubset.split('').reverse().join('');
+                const revPattern = searchNorm.split('').reverse().join('');
+                const revBest = this.findBestFuzzySubstring(revText, revPattern, maxDistance);
+
+                if (revBest.distance <= maxDistance && revBest.endIndex !== -1) {
+                    firstIdx = bestSub.endIndex - revBest.endIndex;
+                    matchLength = bestSub.endIndex - firstIdx + 1;
+                    this.logChannel(`  -> Fuzzy match succeeded: distance ${bestSub.distance}/${maxDistance}`);
+                }
+            }
+        }
+
         if (firstIdx === -1) {
             return { found: false, isAmbiguous: false };
         }
@@ -273,9 +296,47 @@ export class WorkspacePatcher {
         }
 
         const startOriginal = docObj.indexMap[firstIdx];
-        const endOriginal = docObj.indexMap[firstIdx + searchNorm.length];
+        const endOriginal = docObj.indexMap[firstIdx + matchLength];
 
         return { found: true, isAmbiguous: false, startOriginal, endOriginal };
+    }
+
+    private findBestFuzzySubstring(text: string, pattern: string, maxDistance: number): { endIndex: number, distance: number } {
+        if (pattern.length === 0) return { endIndex: -1, distance: 0 };
+        if (text.length === 0) return { endIndex: -1, distance: pattern.length };
+
+        let prevRow = new Int32Array(pattern.length + 1);
+        let currRow = new Int32Array(pattern.length + 1);
+        for (let i = 0; i <= pattern.length; i++) prevRow[i] = i;
+
+        let bestDistance = maxDistance + 1;
+        let bestEndIndex = -1;
+
+        for (let i = 0; i < text.length; i++) {
+            currRow[0] = 0; // free start for substring search
+            const textChar = text[i];
+
+            for (let j = 0; j < pattern.length; j++) {
+                const cost = textChar === pattern[j] ? 0 : 1;
+                currRow[j + 1] = Math.min(
+                    currRow[j] + 1,      // insertion
+                    prevRow[j + 1] + 1,  // deletion
+                    prevRow[j] + cost    // substitution
+                );
+            }
+
+            if (currRow[pattern.length] < bestDistance) {
+                bestDistance = currRow[pattern.length];
+                bestEndIndex = i;
+            }
+
+            // Swap arrays
+            const temp = prevRow;
+            prevRow = currRow;
+            currRow = temp;
+        }
+
+        return { endIndex: bestEndIndex, distance: bestDistance };
     }
 
     public async applyChanges(changes: FileChange[]): Promise<boolean> {
