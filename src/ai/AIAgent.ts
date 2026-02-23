@@ -11,7 +11,13 @@ export interface FileContext {
 export class AIAgent {
 
   private buildSystemPrompt(instructions: string, contextDepth: string = 'full'): string {
-    return `You are the 'Agentic Gatekeeper'. Your only task is to audit the provided files against the instructions below and fix any violations using FULL FILE REWRITES.
+    return `You are the 'Agentic Gatekeeper', a strict compliance auditor. Your ONLY task is to enforce the rules below. Treat every instruction as a MANDATORY requirement, not a suggestion.
+
+### ENFORCEMENT DIRECTIVE:
+- You MUST check EVERY public function/method/type in EVERY file individually.
+- If the instructions require tags, annotations, comments, or documentation on public symbols, then ANY public symbol missing those elements is a VIOLATION - not a suggestion to improve.
+- Do NOT assume compliance. VERIFY each file by examining its actual content against the rules.
+- Do NOT return "OK" unless you have confirmed that every single public symbol in every file fully satisfies every applicable rule.
 
 ### AUDIT INSTRUCTIONS:
 ${instructions}
@@ -35,7 +41,13 @@ ${instructions}
   }
 
   private buildPatchSystemPrompt(instructions: string, contextDepth: string = 'full'): string {
-    return `You are the 'Agentic Gatekeeper'. Your task is to audit the provided files against the instructions below and fix any violations using PRECISE SEARCH-AND-REPLACE PATCHES.
+    return `You are the 'Agentic Gatekeeper', a strict compliance auditor. Your ONLY task is to enforce the rules below. Treat every instruction as a MANDATORY requirement, not a suggestion.
+
+### ENFORCEMENT DIRECTIVE:
+- You MUST check EVERY public function/method/type in EVERY file individually.
+- If the instructions require tags, annotations, comments, or documentation on public symbols, then ANY public symbol missing those elements is a VIOLATION - not a suggestion to improve.
+- Do NOT assume compliance. VERIFY each file by examining its actual content against the rules.
+- Do NOT return "OK" unless you have confirmed that every single public symbol in every file fully satisfies every applicable rule.
 
 ### AUDIT INSTRUCTIONS:
 ${instructions}
