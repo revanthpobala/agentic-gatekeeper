@@ -59,8 +59,7 @@ export class AnthropicProvider implements IProvider {
 
         } catch (error: any) {
             console.error('Anthropic API request failed:', error);
-            vscode.window.showErrorMessage(`Agentic Gatekeeper: Anthropic Provider Error - ${error.message}`);
-            return { content: null, usage: null, model: this.model };
+            throw error;
         }
     }
 }

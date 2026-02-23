@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { IProvider, ProviderResult } from './IProvider';
 
 export interface FileContext {
@@ -68,6 +69,8 @@ ${instructions}
       }
     }
 
-    throw lastError ?? new Error('AIAgent: All retry attempts exhausted.');
+    const finalError = lastError ?? new Error('AIAgent: All retry attempts exhausted.');
+    vscode.window.showErrorMessage(`Agentic Gatekeeper: AI Analysis Failed - ${finalError.message}`);
+    throw finalError;
   }
 }

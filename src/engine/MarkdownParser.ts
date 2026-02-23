@@ -40,26 +40,28 @@ export class MarkdownParser {
      * root-level files like AGENTS.md, and any file in a recognized config directory.
      */
     private classifyRule(relativePath: string): { type: 'global' | 'domain', domainPath?: string } {
+        // Normalize to forward slashes for consistent matching across OSs
+        const normalizedPath = relativePath.replace(/\\/g, '/');
 
         // Root-level markdown files are always global
-        if (!relativePath.includes('/')) {
+        if (!normalizedPath.includes('/')) {
             return { type: 'global' };
         }
 
         // Well-known global rule directories
         for (const dir of GLOBAL_RULE_DIRS) {
-            if (relativePath.startsWith(dir + '/') || relativePath.startsWith(dir + '\\')) {
+            if (normalizedPath.startsWith(dir + '/')) {
                 return { type: 'global' };
             }
         }
 
         // Any dot-directory at the root is treated as global config
-        if (relativePath.startsWith('.')) {
+        if (normalizedPath.startsWith('.')) {
             return { type: 'global' };
         }
 
         // Everything else is domain-specific
-        return { type: 'domain', domainPath: path.dirname(relativePath) };
+        return { type: 'domain', domainPath: path.dirname(normalizedPath) };
     }
 
     /**

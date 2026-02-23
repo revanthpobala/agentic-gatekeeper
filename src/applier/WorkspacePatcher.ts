@@ -42,7 +42,12 @@ export class WorkspacePatcher {
 
     private tryParseFileChanges(text: string): FileChange[] | null {
         try {
-            const parsed = JSON.parse(text);
+            // Basic sanitization: strip trailing commas in arrays/objects
+            const sanitized = text
+                .replace(/,\s*\]/g, ']')
+                .replace(/,\s*\}/g, '}');
+
+            const parsed = JSON.parse(sanitized);
             if (!Array.isArray(parsed)) { return null; }
             // Validate shape of each element
             const valid = parsed.filter(

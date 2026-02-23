@@ -53,6 +53,22 @@ Implement "Result Caching" to optimize performance and "Violation Explanations" 
 ### [package.json](package.json)
 - Sync `default` rules: ensure `agents.md` (lowercase) is included to match `MarkdownParser` defaults.
 
+## Phase 3: Bug Audit & Hardening
+
+Addresses issues identified during post-implementation audit.
+
+### AIAgent & Providers
+- **Retry Loop Restoration**: Providers will now throw transient errors (429, 503, network) instead of catching them and returning `null`. Configuration errors (missing keys) will still return `null` to fail fast.
+
+### MarkdownParser
+- **OS-Agnostic Classification**: Use `path.sep` and normalize all paths to forward slashes before classification to ensure reliable rule application on Windows.
+
+### GatekeeperEngine
+- **Model-Aware Caching**: Include the active `model` ID in the caching hash. This ensures that switching models (e.g., from Gemini to Claude) invalidates the cache, as different models have varying degrees of rule-following precision.
+
+### WorkspacePatcher
+- **JSON Sanitization**: Implement a simple regex to strip trailing commas from AI-generated JSON before parsing, increasing resilience to common LLM formatting slips.
+
 ## Verification Plan
 
 ### Automated Tests

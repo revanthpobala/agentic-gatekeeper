@@ -52,8 +52,7 @@ export class OpenRouterProvider implements IProvider {
 
         } catch (error: any) {
             console.error('OpenRouter API Error:', error);
-            vscode.window.showErrorMessage(`Agentic Gatekeeper: OpenRouter Error - ${error.message}`);
-            return { content: null, usage: null, model: this.model };
+            throw error;
         }
     }
 }

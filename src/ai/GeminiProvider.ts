@@ -54,8 +54,8 @@ export class GeminiProvider implements IProvider {
         } catch (error: any) {
             const errMsg = error?.message || String(error);
             this.log(`ERROR: ${errMsg}`);
-            vscode.window.showErrorMessage(`Agentic Gatekeeper: Gemini Provider Error - ${errMsg}`);
-            return { content: null, usage: null, model: this.model };
+            // Re-throw so AIAgent can handle retries
+            throw error;
         }
     }
 }

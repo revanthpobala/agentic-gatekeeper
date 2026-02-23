@@ -41,8 +41,7 @@ export class OpenAIProvider implements IProvider {
 
         } catch (error: any) {
             console.error('OpenAI API Error:', error);
-            vscode.window.showErrorMessage(`Agentic Gatekeeper: OpenAI Error - ${error.message}`);
-            return { content: null, usage: null, model: this.model };
+            throw error;
         }
     }
 }

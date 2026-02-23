@@ -123,9 +123,12 @@ export class GatekeeperEngine {
                 }
 
                 const instructions = await markdownParser.getConsolidatedInstructions(rules);
-                const instructionsHash = this.computeHash(instructions);
 
-                // 2. Audit Staged & Modified Files
+                // 2. AI Orchestration (Moved up for caching)
+                const { provider, modeName } = AIProviderFactory.createProvider(this.outputChannel);
+                const instructionsHash = this.computeHash(instructions + '|' + modeName);
+
+                // 3. Audit Staged & Modified Files
                 progress.report({ message: "Analyzing local changes..." });
                 const stagedFiles = await gitContext.getStagedFiles();
                 const modifiedFiles = await gitContext.getModifiedFiles();
@@ -206,8 +209,6 @@ export class GatekeeperEngine {
                     return;
                 }
 
-                // 3. AI Orchestration
-                const { provider, modeName } = AIProviderFactory.createProvider(this.outputChannel);
                 const executionStrategy = config.get<string>('executionStrategy') || 'aggregated';
                 const isConcurrent = config.get<string>('concurrencyMode') === 'Concurrent' && executionStrategy !== 'continuous';
                 const maxTokensPerBatch = config.get<number>('maxTokensPerBatch') || 30000;
