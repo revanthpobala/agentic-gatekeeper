@@ -138,6 +138,8 @@ export class WorkspacePatcher {
             '// same as original',
             '/* ... */',
             'same as above',
+            'omitted for brevity',
+            'truncated for brevity'
         ];
 
         return changes.filter(change => {
@@ -172,6 +174,8 @@ export class WorkspacePatcher {
             '// existing code here',
             '// same as before',
             '/* ... */',
+            'omitted for brevity',
+            'truncated for brevity'
         ];
 
         return patches.filter(filePatch => {
