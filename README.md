@@ -38,6 +38,19 @@ The Agentic Gatekeeper recursively scans your workspace for Markdown files that 
 - **Global Rules**: Any markdown file within the `.gatekeeper/` directory, or a root-level file named `AGENTS.md`, `ARCHITECTURE.md`, or `CONTRIBUTING.md`.
 - **Directory / Local Rules**: Any file ending in `-instructions.md` or `-gatekeeper.md` located deep in a subdirectory (e.g. `src/components/ui-instructions.md`).
 
+### Targeting Specific Files (Rule Globs)
+You can restrict any rule file to specific file extensions or subdirectories using **YAML Frontmatter**. Add a `globs` field at the very top of your markdown file:
+
+```markdown
+---
+globs: "src/**/*.ts, src/**/*.tsx"
+---
+# TypeScript Architecture Rules
+1. Every function must have an explicit return type...
+```
+
+The Gatekeeper will automatically skip these rules for any staged files that don't match the glob patterns.
+
 ## Features
 
 - **Streaming Execution Strategy**: Patches are applied in real-time as batches resolve, drastically reducing wait time for large regressions.
@@ -81,8 +94,6 @@ The Agentic Gatekeeper requires an LLM backend to function. By default, it uses 
 If you need to force a re-analysis despite valid cache entries, you can clear the cache via the Source Control overflow menu:
 
 ![Clear Cache Menu](images/5.png)
-
-### Supported Providers
 
 ### Supported Providers
 
