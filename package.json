@@ -2,7 +2,7 @@
   "name": "agentic-gatekeeper",
   "displayName": "Agentic Gatekeeper",
   "description": "The industry's first Agentic Rule Enforcer. Automatically compare your Project Ruleset against staged changes and apply full-file patches using Claude, GPT, Qwen, and DeepSeek. Stop technical debt before it hits your branch.",
-  "version": "1.1.6",
+  "version": "1.2.0",
   "publisher": "revanthpobala",
   "author": "Revanth Pobala",
   "license": "SEE LICENSE IN LICENSE.txt",
@@ -82,6 +82,10 @@
       {
         "command": "agentic-gatekeeper.setupInstructions",
         "title": "Agentic Gatekeeper: Create Agentic Rules Folder"
+      },
+      {
+        "command": "agentic-gatekeeper.clearCache",
+        "title": "Agentic Gatekeeper: Clear Analysis Cache"
       }
     ],
     "menus": {
@@ -90,6 +94,11 @@
           "command": "agentic-gatekeeper.analyzeStaged",
           "when": "scmProvider == git",
           "group": "navigation"
+        },
+        {
+          "command": "agentic-gatekeeper.clearCache",
+          "when": "scmProvider == git",
+          "group": "1_gatekeeper"
         }
       ]
     },
@@ -128,6 +137,11 @@
           "default": 20000,
           "description": "Maximum estimated tokens of file content per API request. Files are grouped into batches to minimize redundant rule-token duplication. Lower values (15k-25k) are highly recommended for local LLMs (Ollama/DeepSeek) to prevent stalls."
         },
+        "agenticGatekeeper.largeFileThreshold": {
+          "type": "number",
+          "default": 200,
+          "description": "Files with more lines than this use search-and-replace patch mode instead of full rewrite. Set to 0 to always use full rewrite."
+        },
         "agenticGatekeeper.contextDepth": {
           "type": "string",
           "enum": [
@@ -141,10 +155,11 @@
           "type": "string",
           "enum": [
             "aggregated",
-            "continuous"
+            "continuous",
+            "streaming"
           ],
           "default": "aggregated",
-          "description": "Execution strategy: 'aggregated' audits everything first, then applies all fixes (safer). 'continuous' analyzes one batch and applies fixes immediately before moving to the next (best for very large sets or unreliable local LLMs)."
+          "description": "Execution strategy: 'aggregated' audits everything first, then applies fixes (safer). 'streaming' runs concurrently but applies fixes as each resolves (fastest for large reps). 'continuous' analyzes one batch, applies, then starts the next (safest for local LLMs)."
         },
         "agenticGatekeeper.dryRun": {
           "type": "boolean",
@@ -235,6 +250,14 @@
             "ARCHITECTURE.md"
           ],
           "description": "Glob patterns for Markdown instruction files the Gatekeeper should enforce. Supports wildcards (e.g., 'docs/rules/*.md')."
+        },
+        "agenticGatekeeper.excludePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Glob patterns for files/directories to exclude from analysis (e.g., 'scripts/**', 'vendor/**', '*.test.go'). These are in addition to the built-in skip list."
         }
       }
     }

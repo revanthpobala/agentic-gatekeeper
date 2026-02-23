@@ -31,32 +31,69 @@ The Agentic Gatekeeper is a localized, autonomous AI Agent that acts as a strict
 ### Rule Scopes (Where to put your markdown rules)
 ![Markdown Local Rules vs Global Rules](images/2.png)
 
-The Agentic Gatekeeper recursively scans your workspace for Markdown files that fit specific naming conventions and apply them contextualized to the directories they are in. By default, it searches for these specific file patterns (which can be fully customized in your VS Code settings):
+The Agentic Gatekeeper recursively scans your workspace for Markdown files that fit specific naming conventions and apply them contextualized to the directories they are in. By default, it searches for these specific file patterns:
 
 ![Configurable Rules Files Locations](images/4.png)
 
-- **Global Rules**: Any markdown file within the `.gatekeeper/` directory, or a root-level file named `AGENTS.md`, `ARCHITECTURE.md`, or `CONTRIBUTING.md`. These rules apply to *every staged file* in your commit.
-- **Directory / Local Rules**: Any file ending in `-instructions.md` or `-gatekeeper.md` located deep in a subdirectory (e.g. `src/components/ui-instructions.md`). The Gatekeeper is smart enough to ensure that rules defined here *only* apply to staged files modified within that specific subdirectory tree.
+- **Global Rules**: Any markdown file within the `.gatekeeper/` directory, or a root-level file named `AGENTS.md`, `ARCHITECTURE.md`, or `CONTRIBUTING.md`.
+- **Directory / Local Rules**: Any file ending in `-instructions.md` or `-gatekeeper.md` located deep in a subdirectory (e.g. `src/components/ui-instructions.md`).
+
+### Targeting Specific Files (Rule Globs)
+You can restrict any rule file to specific file extensions or subdirectories using **YAML Frontmatter**. Add a `globs` field at the very top of your markdown file:
+
+```markdown
+---
+globs: "src/**/*.ts, src/**/*.tsx"
+---
+# TypeScript Architecture Rules
+1. Every function must have an explicit return type...
+```
+
+The Gatekeeper will automatically skip these rules for any staged files that don't match the glob patterns.
 
 ## Features
 
-- **Infinite Versatility**: Your rules can be *anything*. If you can write it in plain English markdown, the Agentic Gatekeeper can read it and strictly enforce it across your codebase. 
-- Scans workspace for Markdown rule files (e.g. `AGENTS.md`)
-- Extracts staged Git Diffs AND Full File contexts.
-- Selectively evaluates rules against the content domain (e.g., TS rules only for TS files).
-- Auto-patches non-compliant code using VS Code native workspace edits.
-- Supports any major Large Language Model.
+- **Streaming Execution Strategy**: Patches are applied in real-time as batches resolve, drastically reducing wait time for large regressions.
+- **Intelligent Patch Mode**: Automatically switches to high-reliability search-and-replace patching for large files (>200 lines) using whitespace-agnostic fuzzy matching.
+- **Diff-Only Context**: Auto-switches to diff mode for massive files (>1000 lines) to preserve token budgets while maintaining accuracy.
+- **Smart Caching**: Persistent analysis caching tracks both file content and rule versions for instant re-runs on compliant code.
+- **.gatekeeperignore Support**: Native support for excluding patterns from AI analysis using standard glob syntax.
+- **Percentage Progress Bar**: Real-time visual feedback of analysis progress directly in the notification bar.
+- **Auto-Fix Compliance**: Natively patches non-compliant code using VS Code workspace edits.
+- **Infinite Versatility**: If you can write it in plain English markdown, the Agentic Gatekeeper can enforce it.
+
+## Ignoring Files
+
+The Gatekeeper allows you to exclude specific files or directories from analysis using two methods:
+
+### 1. `.gatekeeperignore` (Recommended)
+Create a `.gatekeeperignore` file in your workspace root. It supports standard glob patterns and comments:
+```ignore
+# Ignore generated code
+**/generated/*.ts
+
+# Ignore high-churn legacy files
+legacy/utils.js
+```
+
+### 2. VS Code Settings
+You can also define a global exclusion list in your settings under `agenticGatekeeper.excludePatterns`.
 
 ## Configuration & API Keys
 
-The Agentic Gatekeeper requires an LLM backend to function. By default, it uses the **Native IDE Model** (Copilot/Gemini, if signed in). However, for maximum capability (or if using Cursor/Antigravity), you should configure an external provider.
+The Agentic Gatekeeper requires an LLM backend to function. By default, it uses the **Native IDE Model** (Copilot/Gemini, if signed in). However, for maximum capability, you should configure an external provider.
 
-![General Settings Panel](images/3.png)
+![Execution Strategy Settings](images/6.png)
 
 ### How to Configure
 1. Open the Command Palette (`Cmd+Shift+P` on Mac).
 2. Type and select: **`Agentic Gatekeeper: Configure API Key`**
-3. This opens the VS Code Settings page under `Extensions > Agentic Gatekeeper`.
+3. This opens the settings page where you can set your keys and choose your **Execution Strategy**.
+
+### Caching
+If you need to force a re-analysis despite valid cache entries, you can clear the cache via the Source Control overflow menu:
+
+![Clear Cache Menu](images/5.png)
 
 ### Supported Providers
 

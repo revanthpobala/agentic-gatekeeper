@@ -40,26 +40,35 @@ export class MarkdownParser {
      * root-level files like AGENTS.md, and any file in a recognized config directory.
      */
     private classifyRule(relativePath: string): { type: 'global' | 'domain', domainPath?: string } {
+        // Normalize to forward slashes for consistent matching across OSs
+        const normalizedPath = relativePath.replace(/\\/g, '/');
 
         // Root-level markdown files are always global
-        if (!relativePath.includes('/')) {
+        if (!normalizedPath.includes('/')) {
             return { type: 'global' };
         }
 
         // Well-known global rule directories
         for (const dir of GLOBAL_RULE_DIRS) {
-            if (relativePath.startsWith(dir + '/') || relativePath.startsWith(dir + '\\')) {
+            if (normalizedPath.startsWith(dir + '/')) {
                 return { type: 'global' };
             }
         }
 
         // Any dot-directory at the root is treated as global config
-        if (relativePath.startsWith('.')) {
+        if (normalizedPath.startsWith('.')) {
             return { type: 'global' };
         }
 
         // Everything else is domain-specific
-        return { type: 'domain', domainPath: path.dirname(relativePath) };
+        return { type: 'domain', domainPath: path.dirname(normalizedPath) };
+    }
+
+    private extractFrontmatterGlobs(content: string): string | undefined {
+        const fmMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
+        if (!fmMatch) return undefined;
+        const globsMatch = fmMatch[1].match(/^globs:\s*['"]?(.+?)['"]?\s*$/m);
+        return globsMatch ? globsMatch[1].trim() : undefined;
     }
 
     /**
@@ -67,8 +76,8 @@ export class MarkdownParser {
      * Uses two strategies: vscode.workspace.findFiles for standard patterns,
      * and direct filesystem reads for dot-directories that findFiles may skip.
      */
-    public async getRuleContext(): Promise<{ filename: string, content: string, type: 'global' | 'domain', domainPath?: string }[]> {
-        const rulesContext: { filename: string, content: string, type: 'global' | 'domain', domainPath?: string }[] = [];
+    public async getRuleContext(): Promise<{ filename: string, content: string, type: 'global' | 'domain', domainPath?: string, globs?: string }[]> {
+        const rulesContext: { filename: string, content: string, type: 'global' | 'domain', domainPath?: string, globs?: string }[] = [];
         const seenPaths = new Set<string>();
         const patterns = this.targetRulesFiles;
 
@@ -105,6 +114,7 @@ export class MarkdownParser {
                             content,
                             type: classification.type,
                             domainPath: classification.domainPath,
+                            globs: this.extractFrontmatterGlobs(content)
                         });
                     } catch (error) {
                         this.log(`  ! Failed to read: ${uri.fsPath}`);
@@ -128,7 +138,7 @@ export class MarkdownParser {
      */
     private async scanDirectPattern(
         pattern: string,
-        rulesContext: { filename: string, content: string, type: 'global' | 'domain', domainPath?: string }[],
+        rulesContext: { filename: string, content: string, type: 'global' | 'domain', domainPath?: string, globs?: string }[],
         seenPaths: Set<string>
     ): Promise<void> {
         // Extract the directory portion from the glob (e.g., ".cursor/rules" from ".cursor/rules/*.md")
@@ -171,6 +181,7 @@ export class MarkdownParser {
                         content,
                         type: classification.type,
                         domainPath: classification.domainPath,
+                        globs: this.extractFrontmatterGlobs(content)
                     });
                 } catch {
                     this.log(`  ! Failed to read: ${fullPath}`);
@@ -205,7 +216,7 @@ export class MarkdownParser {
      * Accepts pre-fetched rules or fetches them if not provided.
      */
     public async getConsolidatedInstructions(
-        preloaded?: { filename: string, content: string, type: 'global' | 'domain', domainPath?: string }[]
+        preloaded?: { filename: string, content: string, type: 'global' | 'domain', domainPath?: string, globs?: string }[]
     ): Promise<string> {
         const rules = preloaded ?? await this.getRuleContext();
         if (rules.length === 0) {

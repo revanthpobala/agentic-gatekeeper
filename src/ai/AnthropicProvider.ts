@@ -12,7 +12,7 @@ export class AnthropicProvider implements IProvider {
     }
 
     public async execute(systemPrompt: string, userPrompt: string): Promise<ProviderResult> {
-        if (!this.apiKey) {
+        if (!this.apiKey || this.apiKey.trim() === '') {
             vscode.window.showErrorMessage('Agentic Gatekeeper: Anthropic API Key is missing. Please configure it in settings.');
             return { content: null, usage: null, model: this.model };
         }
@@ -27,7 +27,7 @@ export class AnthropicProvider implements IProvider {
                 },
                 body: JSON.stringify({
                     model: this.model,
-                    max_tokens: 4096,
+                    max_tokens: 8192,
                     temperature: 0.1, // Low temperature for deterministic output
                     system: systemPrompt,
                     messages: [
@@ -59,8 +59,7 @@ export class AnthropicProvider implements IProvider {
 
         } catch (error: any) {
             console.error('Anthropic API request failed:', error);
-            vscode.window.showErrorMessage(`Agentic Gatekeeper: Anthropic Provider Error - ${error.message}`);
-            return { content: null, usage: null, model: this.model };
+            throw error;
         }
     }
 }

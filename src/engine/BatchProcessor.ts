@@ -11,6 +11,8 @@ export interface BatchConstraints {
     maxTokensPerBatch: number;
     instructionTokens: number;
     safetyBuffer?: number; // Default 2000
+    largeFileThreshold?: number; // Determine patch vs rewrite prediction
+    maxRewriteFilesPerBatch?: number; // Cap for rewrite mode
 }
 
 /**
@@ -52,8 +54,19 @@ export function groupIntoBatches(
             continue;
         }
 
-        // If adding this file would exceed the batch budget, move to a new batch
-        if (currentTokens + fileTokens > effectiveBudget && currentBatch.length > 0) {
+        // Determine if current batch (with new file) would trigger PATCH mode
+        const threshold = constraints.largeFileThreshold ?? 0;
+        const willBePatchMode = threshold > 0 && (
+            (file.lineCount ?? 0) > threshold || currentBatch.some(f => (f.lineCount ?? 0) > threshold)
+        );
+
+        // Enforce the rewrite-mode file cap if applicable
+        const hitsRewriteCap = !willBePatchMode &&
+            constraints.maxRewriteFilesPerBatch &&
+            currentBatch.length >= constraints.maxRewriteFilesPerBatch;
+
+        // If adding this file would exceed the batch budget or file cap, move to a new batch
+        if ((currentTokens + fileTokens > effectiveBudget && currentBatch.length > 0) || hitsRewriteCap) {
             batches.push(currentBatch);
             currentBatch = [file];
             currentTokens = fileTokens;
