@@ -116,7 +116,7 @@ export class WorkspacePatcher {
         const resolvedChanges: { change: FileChange; uri: vscode.Uri }[] = [];
         for (const change of changes) {
             const resolvedPath = path.resolve(this.workspaceRoot, change.filePath);
-            if (!resolvedPath.startsWith(this.workspaceRoot)) {
+            if (!resolvedPath.startsWith(this.workspaceRoot + path.sep) && resolvedPath != this.workspaceRoot) {
                 this.logChannel(`BLOCKED path traversal attempt: ${change.filePath}`);
                 vscode.window.showWarningMessage(`Agentic Gatekeeper: Blocked unsafe path from AI: ${change.filePath}`);
                 continue;
