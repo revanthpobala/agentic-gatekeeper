@@ -7,6 +7,17 @@ export interface FileChange {
     newContent: string;
 }
 
+export interface PatchOperation {
+    search: string;
+    replace: string;
+}
+
+export interface FilePatch {
+    filePath: string;
+    reason?: string;
+    patches: PatchOperation[];
+}
+
 export class WorkspacePatcher {
     private workspaceRoot: string;
     private outputChannel?: vscode.OutputChannel;
@@ -39,7 +50,29 @@ export class WorkspacePatcher {
 
         this.logChannel(`No valid JSON array found in response: ${raw.slice(0, 50)}...`);
         return [];
+    }
 
+    public parseAIPatchResponse(response: string): FilePatch[] {
+        const raw = response.trim();
+        const attempt1 = this.tryParseFilePatches(raw);
+        if (attempt1) { return attempt1; } // Filtering happens in engine or later
+
+        const fenceMatch = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+        if (fenceMatch) {
+            const attempt2 = this.tryParseFilePatches(fenceMatch[1].trim());
+            if (attempt2) { return attempt2; }
+        }
+
+        const firstBracket = raw.indexOf('[');
+        const lastBracket = raw.lastIndexOf(']');
+
+        if (firstBracket !== -1 && lastBracket > firstBracket) {
+            const attempt3 = this.tryParseFilePatches(raw.slice(firstBracket, lastBracket + 1));
+            if (attempt3) { return attempt3; }
+        }
+
+        this.logChannel(`No valid JSON patch array found in response: ${raw.slice(0, 50)}...`);
+        return [];
     }
 
     private tryParseFileChanges(text: string): FileChange[] | null {
@@ -60,6 +93,34 @@ export class WorkspacePatcher {
                     item.filePath.length > 0 &&
                     (item.reason === undefined || typeof item.reason === 'string') &&
                     typeof item.newContent === 'string'
+            );
+            return valid.length > 0 ? valid : null;
+        } catch {
+            return null;
+        }
+    }
+
+    private tryParseFilePatches(text: string): FilePatch[] | null {
+        try {
+            const sanitized = text
+                .replace(/,\s*\]/g, ']')
+                .replace(/,\s*\}/g, '}');
+
+            const parsed = JSON.parse(sanitized);
+            if (!Array.isArray(parsed)) { return null; }
+
+            const valid = parsed.filter(
+                (item): item is FilePatch =>
+                    typeof item === 'object' &&
+                    item !== null &&
+                    typeof item.filePath === 'string' &&
+                    item.filePath.length > 0 &&
+                    Array.isArray(item.patches) &&
+                    item.patches.every((p: any) =>
+                        typeof p === 'object' && p !== null &&
+                        typeof p.search === 'string' &&
+                        typeof p.replace === 'string'
+                    )
             );
             return valid.length > 0 ? valid : null;
         } catch {
@@ -105,10 +166,106 @@ export class WorkspacePatcher {
         });
     }
 
-    /**
-     * Applies full file rewrites to the workspace atomically.
-     * Warns if any targeted file has unsaved changes before proceeding.
-     */
+    public filterPatches(patches: FilePatch[]): FilePatch[] {
+        const junkPatterns = [
+            '// ... existing code ...',
+            '// existing code here',
+            '// same as before',
+            '/* ... */',
+        ];
+
+        return patches.filter(filePatch => {
+            const validPatches = filePatch.patches.filter(patch => {
+                if (!patch.search || patch.search.trim().length === 0) {
+                    this.logChannel(`REJECTED patch in ${filePatch.filePath} - empty search string.`);
+                    return false;
+                }
+
+                const lowerReplace = patch.replace.toLowerCase();
+                if (/^(ok|fixed|compliant|pass|done|no\s+violations?)$/i.test(patch.replace.trim())) {
+                    this.logChannel(`REJECTED patch in ${filePatch.filePath} - substitution is a status word.`);
+                    return false;
+                }
+
+                const detectedJunk = junkPatterns.find(p => lowerReplace.includes(p));
+                if (detectedJunk) {
+                    this.logChannel(`REJECTED patch in ${filePatch.filePath} - replace contains placeholder: "${detectedJunk}"`);
+                    return false;
+                }
+
+                if (patch.search === patch.replace) {
+                    this.logChannel(`REJECTED patch in ${filePatch.filePath} - search and replace are identical (no-op).`);
+                    return false;
+                }
+
+                return true;
+            });
+
+            filePatch.patches = validPatches;
+            return validPatches.length > 0;
+        });
+    }
+
+    private normalizeText(text: string): { normalized: string, indexMap: number[] } {
+        const normalizedChars: string[] = [];
+        const indexMap: number[] = [];
+
+        // State for tracking sequences of whitespace
+        let inWhitespace = false;
+
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+
+            if (/\s/.test(char)) {
+                if (!inWhitespace) {
+                    normalizedChars.push(' ');
+                    indexMap.push(i);
+                    inWhitespace = true;
+                }
+                // If we're already in whitespace, we skip adding ' ' again
+                // but we map this original string index to the last written char
+            } else {
+                normalizedChars.push(char);
+                indexMap.push(i);
+                inWhitespace = false;
+            }
+        }
+
+        // Add one final map entry for the end of the string
+        indexMap.push(text.length);
+
+        return {
+            normalized: normalizedChars.join(''),
+            indexMap
+        };
+    }
+
+    private findNormalizedMatch(documentText: string, searchRaw: string): { found: boolean, isAmbiguous: boolean, startOriginal?: number, endOriginal?: number } {
+        const docObj = this.normalizeText(documentText);
+        // We only trim the search string before normalization to avoid edge boundary mismatch
+        const searchObj = this.normalizeText(searchRaw.trim());
+
+        const docNorm = docObj.normalized;
+        const searchNorm = searchObj.normalized;
+
+        if (searchNorm.length === 0) return { found: false, isAmbiguous: false };
+
+        const firstIdx = docNorm.indexOf(searchNorm);
+        if (firstIdx === -1) {
+            return { found: false, isAmbiguous: false };
+        }
+
+        const nextIdx = docNorm.indexOf(searchNorm, firstIdx + 1);
+        if (nextIdx !== -1) {
+            return { found: true, isAmbiguous: true };
+        }
+
+        const startOriginal = docObj.indexMap[firstIdx];
+        const endOriginal = docObj.indexMap[firstIdx + searchNorm.length];
+
+        return { found: true, isAmbiguous: false, startOriginal, endOriginal };
+    }
+
     public async applyChanges(changes: FileChange[]): Promise<boolean> {
         if (changes.length === 0) { return false; }
 
@@ -160,9 +317,20 @@ export class WorkspacePatcher {
             if (fileExists) {
                 try {
                     const document = await vscode.workspace.openTextDocument(uri);
+
+                    // Size Guardrail for Full Rewrites
+                    const originalLength = document.getText().length;
+                    const newLength = change.newContent.length;
+
+                    if (originalLength > 0 && newLength < (originalLength * 0.70)) {
+                        this.logChannel(`REJECTED ${change.filePath} rewrite - suspicious size reduction (${originalLength} -> ${newLength} chars). Possible AI truncation.`);
+                        vscode.window.showWarningMessage(`Agentic Gatekeeper: Rejected rewrite of ${change.filePath} because the new content is >30% smaller. This indicates the AI truncated the file.`);
+                        continue;
+                    }
+
                     const fullRange = new vscode.Range(
                         document.positionAt(0),
-                        document.positionAt(document.getText().length)
+                        document.positionAt(originalLength)
                     );
                     edit.replace(uri, fullRange, change.newContent);
                 } catch (err) {
@@ -191,6 +359,100 @@ export class WorkspacePatcher {
         }
 
         return success;
+    }
+
+    public async applyPatches(patches: FilePatch[]): Promise<boolean> {
+        if (patches.length === 0) { return false; }
+
+        const edit = new vscode.WorkspaceEdit();
+        let anyFilesPatched = false;
+
+        for (const filePatch of patches) {
+            const resolvedPath = path.resolve(this.workspaceRoot, filePatch.filePath);
+            if (!resolvedPath.startsWith(this.workspaceRoot + path.sep) && resolvedPath != this.workspaceRoot) {
+                this.logChannel(`BLOCKED path traversal attempt: ${filePatch.filePath}`);
+                continue;
+            }
+
+            const uri = vscode.Uri.file(resolvedPath);
+            let document: vscode.TextDocument;
+
+            try {
+                document = await vscode.workspace.openTextDocument(uri);
+            } catch (err) {
+                this.logChannel(`Cannot open ${filePatch.filePath} for patching: ${err}`);
+                continue;
+            }
+
+            if (document.isDirty) {
+                this.logChannel(`SKIPPED ${filePatch.filePath} - file has unsaved changes.`);
+                vscode.window.showWarningMessage(`Agentic Gatekeeper: Skipped patching ${filePatch.filePath} because it has unsaved changes.`);
+                continue;
+            }
+
+            const originalText = document.getText();
+            let allMatchesSafe = true;
+
+            // Map to store validated replacements for this document
+            const validatedEdits: { range: vscode.Range, newText: string }[] = [];
+
+            // Pre-calculate all ranges atomically
+            for (const p of filePatch.patches) {
+                const matchResult = this.findNormalizedMatch(originalText, p.search);
+
+                if (!matchResult.found) {
+                    this.logChannel(`ABORTING patches for ${filePatch.filePath}: Search string anchor not found in document.`);
+                    vscode.window.showWarningMessage(`Agentic Gatekeeper: Could not patch ${filePatch.filePath}. A search block could not be located.`);
+                    allMatchesSafe = false;
+                    break;
+                }
+
+                if (matchResult.isAmbiguous) {
+                    this.logChannel(`ABORTING patches for ${filePatch.filePath}: Search string anchor is ambiguous (multiple occurrences).`);
+                    vscode.window.showWarningMessage(`Agentic Gatekeeper: Could not patch ${filePatch.filePath}. A search block appears multiple times.`);
+                    allMatchesSafe = false;
+                    break;
+                }
+
+                if (matchResult.startOriginal !== undefined && matchResult.endOriginal !== undefined) {
+                    const startPos = document.positionAt(matchResult.startOriginal);
+                    const endPos = document.positionAt(matchResult.endOriginal);
+                    validatedEdits.push({
+                        range: new vscode.Range(startPos, endPos),
+                        newText: p.replace
+                    });
+                } else {
+                    allMatchesSafe = false;
+                    break;
+                }
+            }
+
+            if (allMatchesSafe && validatedEdits.length > 0) {
+                for (const validatedEdit of validatedEdits) {
+                    edit.replace(uri, validatedEdit.range, validatedEdit.newText);
+                }
+                anyFilesPatched = true;
+            }
+        }
+
+        if (anyFilesPatched) {
+            const success = await vscode.workspace.applyEdit(edit);
+            if (success) {
+                // Save edited files
+                for (const filePatch of patches) {
+                    const resolvedPath = path.resolve(this.workspaceRoot, filePatch.filePath);
+                    try {
+                        const document = await vscode.workspace.openTextDocument(vscode.Uri.file(resolvedPath));
+                        if (document.isDirty) { await document.save(); }
+                    } catch (e) {
+                        // non-fatal
+                    }
+                }
+            }
+            return success;
+        }
+
+        return false;
     }
 
     private logChannel(msg: string) {

@@ -159,6 +159,7 @@ export class GatekeeperEngine {
                 ];
 
                 const contextDepth = config.get<string>('contextDepth') || 'full';
+                const largeFileThreshold = config.get<number>('largeFileThreshold') || 200;
 
                 for (const relativePath of activeFiles) {
                     const basename = path.basename(relativePath);
@@ -191,6 +192,9 @@ export class GatekeeperEngine {
                                 content = await fs.promises.readFile(fullPath, 'utf8');
                             }
 
+                            // Calculate line count for threshold checks
+                            const lineCount = content.split(/\r?\n/).length;
+
                             // Caching Logic: Check if result is already known to be compliant
                             const contentHash = this.computeHash(content);
                             const cacheKey = `gatekeeper:cache:${relativePath}`;
@@ -201,7 +205,7 @@ export class GatekeeperEngine {
                                 continue;
                             }
 
-                            fileContexts.push({ filePath: relativePath, content, contentHash });
+                            fileContexts.push({ filePath: relativePath, content, contentHash, lineCount });
                         }
                     } catch (err) {
                         // Skip files that cannot be read
@@ -265,6 +269,7 @@ export class GatekeeperEngine {
 
                 const totalFiles = fileContexts.length;
                 const allChanges: any[] = [];
+                const allPatches: any[] = [];
                 let hasViolations = false;
                 let hasErrors = false;
 
@@ -284,7 +289,7 @@ export class GatekeeperEngine {
                     const maxConcurrent = config.get<number>('maxConcurrentRequests') || 5;
                     this.outputChannel.appendLine(`Execution: 🚀 Concurrent(Max ${maxConcurrent} parallel batches)`);
 
-                    const results: { batch: FileContext[], result: ProviderResult, error?: string }[] = [];
+                    const results: { batch: FileContext[], batchMode?: 'rewrite' | 'patch', result: ProviderResult, error?: string }[] = [];
 
                     for (let i = 0; i < batches.length; i += maxConcurrent) {
                         if (token.isCancellationRequested) {
@@ -301,13 +306,17 @@ export class GatekeeperEngine {
                             const fileNames = batch.map(f => f.filePath).join(', ');
                             const batchTokens = batch.reduce((sum, f) => sum + estimateTokens(f.content) + estimateTokens(f.filePath) + 50, 0) + instructionTokens;
 
-                            this.outputChannel.appendLine(`  -> Batch ${batchNum}/${batches.length} [${fileNames}]: ${batchTokens.toLocaleString()} tokens (inc. rules). Sending...`);
+                            // Determine if this batch requires PATCH mode (if any file > threshold AND threshold is > 0)
+                            const requiresPatchMode = largeFileThreshold > 0 && batch.some(f => (f.lineCount ?? 0) > largeFileThreshold);
+                            const batchMode: 'rewrite' | 'patch' = requiresPatchMode ? 'patch' : 'rewrite';
+
+                            this.outputChannel.appendLine(`  -> Batch ${batchNum}/${batches.length} [${batchMode.toUpperCase()}] [${fileNames}]: ${batchTokens.toLocaleString()} tokens. Sending...`);
 
                             try {
-                                const result = await orchestrator.analyze(instructions, batch, provider, contextDepth);
-                                return { batch, result };
+                                const result = await orchestrator.analyze(instructions, batch, provider, contextDepth, batchMode);
+                                return { batch, batchMode, result };
                             } catch (err: any) {
-                                return { batch, result: { content: null, usage: null, model: modeName } as ProviderResult, error: err.message };
+                                return { batch, batchMode, result: { content: null, usage: null, model: modeName } as ProviderResult, error: err.message };
                             }
                         });
 
@@ -317,7 +326,7 @@ export class GatekeeperEngine {
 
                     progress.report({ message: `Verifying final analysis results...` });
 
-                    for (const { batch, result, error } of results) {
+                    for (const { batch, batchMode, result, error } of results) {
                         this.accumulateAudit(audit, result);
                         const fileNames = batch.map(f => f.filePath).join(', ');
 
@@ -328,15 +337,33 @@ export class GatekeeperEngine {
                         }
 
                         if (result.content.trim().toUpperCase() !== "OK") {
-                            const changes = patcher.parseAIResponse(result.content);
-                            if (changes && changes.length > 0) {
-                                hasViolations = true;
-                                allChanges.push(...changes);
-                                for (const change of changes) {
-                                    const reason = change.reason || "(no reason provided)";
-                                    this.outputChannel.appendLine(`  -> Violations found in ${change.filePath}: "${reason}" - Auto-fix mapped.`);
+                            let parsedValid = false;
+
+                            if (batchMode === 'patch') {
+                                const patches = patcher.parseAIPatchResponse(result.content);
+                                const validPatches = patcher.filterPatches(patches);
+                                if (validPatches && validPatches.length > 0) {
+                                    hasViolations = true;
+                                    parsedValid = true;
+                                    allPatches.push(...validPatches);
+                                    for (const p of validPatches) {
+                                        this.outputChannel.appendLine(`  -> Violations found in ${p.filePath}: "${p.reason || 'Auto-patch mapped'}"`);
+                                    }
                                 }
                             } else {
+                                const changes = patcher.parseAIResponse(result.content);
+                                if (changes && changes.length > 0) {
+                                    hasViolations = true;
+                                    parsedValid = true;
+                                    allChanges.push(...changes);
+                                    for (const change of changes) {
+                                        const reason = change.reason || "(no reason provided)";
+                                        this.outputChannel.appendLine(`  -> Violations found in ${change.filePath}: "${reason}" - Auto-fix mapped.`);
+                                    }
+                                }
+                            }
+
+                            if (!parsedValid) {
                                 // If it's not "OK" but returned empty JSON, it means the model thinks it's compliant 
                                 // but missed the magic word. We'll treat it as compliant and cache it.
                                 for (const f of batch) {
@@ -376,11 +403,14 @@ export class GatekeeperEngine {
                         const fileNames = batch.map(f => f.filePath).join(', ');
                         const batchTokens = batch.reduce((sum, f) => sum + estimateTokens(f.content) + estimateTokens(f.filePath) + 50, 0) + instructionTokens;
 
-                        this.outputChannel.appendLine(`  -> Batch ${i + 1}/${batches.length} [${fileNames}]: ${batchTokens.toLocaleString()} tokens (inc. rules). Sending...`);
+                        const requiresPatchMode = largeFileThreshold > 0 && batch.some(f => (f.lineCount ?? 0) > largeFileThreshold);
+                        const batchMode = requiresPatchMode ? 'patch' : 'rewrite';
+
+                        this.outputChannel.appendLine(`  -> Batch ${i + 1}/${batches.length} [${batchMode.toUpperCase()}] [${fileNames}]: ${batchTokens.toLocaleString()} tokens. Sending...`);
                         progress.report({ message: `Validating batch ${i + 1}/${batches.length} (${batch.length} files)...` });
 
                         try {
-                            const result = await orchestrator.analyze(instructions, batch, provider, contextDepth);
+                            const result = await orchestrator.analyze(instructions, batch, provider, contextDepth, batchMode);
                             this.accumulateAudit(audit, result);
 
                             if (!result.content) {
@@ -391,27 +421,55 @@ export class GatekeeperEngine {
 
                             if (result.content.trim().toUpperCase() !== "OK") {
                                 hasViolations = true;
-                                const changes = patcher.parseAIResponse(result.content);
-                                if (changes && changes.length > 0) {
-                                    allChanges.push(...changes);
-                                    for (const change of changes) {
-                                        const reason = change.reason || "(no reason provided)";
-                                        this.outputChannel.appendLine(`  -> Violations found in ${change.filePath}: "${reason}" - Auto-fix mapped.`);
-                                    }
+                                let parsedValid = false;
 
-                                    // Continuous Strategy: Apply immediately
-                                    if (executionStrategy === 'continuous' && !isDryRun && contextDepth !== 'diff') {
-                                        this.outputChannel.appendLine(`  -> Continuous Mode: Applying and staging fixes for this batch...`);
-                                        const success = await patcher.applyChanges(changes);
-                                        if (success) {
-                                            await gitContext.stageFiles(changes.map((c: any) => c.filePath));
-                                            this.outputChannel.appendLine(`  -> Batch fixes applied and staged successfully.`);
-                                        } else {
-                                            this.outputChannel.appendLine(`  -> Batch fix application failed.`);
-                                            hasErrors = true;
+                                if (batchMode === 'patch') {
+                                    const patches = patcher.parseAIPatchResponse(result.content);
+                                    const validPatches = patcher.filterPatches(patches);
+                                    if (validPatches && validPatches.length > 0) {
+                                        parsedValid = true;
+                                        allPatches.push(...validPatches);
+                                        for (const p of validPatches) {
+                                            this.outputChannel.appendLine(`  -> Violations found in ${p.filePath}: "${p.reason || 'Auto-patch mapped'}"`);
+                                        }
+
+                                        if (executionStrategy === 'continuous' && !isDryRun && contextDepth !== 'diff') {
+                                            const success = await patcher.applyPatches(validPatches);
+                                            if (success) {
+                                                await gitContext.stageFiles(validPatches.map(p => p.filePath));
+                                                this.outputChannel.appendLine(`  -> Batch patches applied and staged successfully.`);
+                                            } else {
+                                                this.outputChannel.appendLine(`  -> Batch patch application failed.`);
+                                                hasErrors = true;
+                                            }
                                         }
                                     }
                                 } else {
+                                    const changes = patcher.parseAIResponse(result.content);
+                                    if (changes && changes.length > 0) {
+                                        parsedValid = true;
+                                        allChanges.push(...changes);
+                                        for (const change of changes) {
+                                            const reason = change.reason || "(no reason provided)";
+                                            this.outputChannel.appendLine(`  -> Violations found in ${change.filePath}: "${reason}" - Auto-fix mapped.`);
+                                        }
+
+                                        // Continuous Strategy: Apply immediately
+                                        if (executionStrategy === 'continuous' && !isDryRun && contextDepth !== 'diff') {
+                                            this.outputChannel.appendLine(`  -> Continuous Mode: Applying and staging fixes for this batch...`);
+                                            const success = await patcher.applyChanges(changes);
+                                            if (success) {
+                                                await gitContext.stageFiles(changes.map((c: any) => c.filePath));
+                                                this.outputChannel.appendLine(`  -> Batch fixes applied and staged successfully.`);
+                                            } else {
+                                                this.outputChannel.appendLine(`  -> Batch fix application failed.`);
+                                                hasErrors = true;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (!parsedValid) {
                                     this.outputChannel.appendLine(`  -> Violations found in batch [${fileNames}] but no JSON auto-patch was returned.`);
                                     this.outputChannel.appendLine(`Report:\n${result.content}`);
                                 }
@@ -446,28 +504,43 @@ export class GatekeeperEngine {
                     this.outputChannel.appendLine('Result: OK (Entire changeset is Compliant)');
                     this.outputChannel.appendLine('Final Verification Complete: 0 files required patching.');
                     vscode.window.showInformationMessage('Agentic Gatekeeper: Code is fully compliant.');
-                } else if (hasErrors && !hasViolations && allChanges.length === 0) {
+                } else if (hasErrors && !hasViolations && allChanges.length === 0 && allPatches.length === 0) {
                     this.outputChannel.appendLine('Result: ⚠️ INCOMPLETE — One or more batches failed. Cannot confirm compliance.');
                     vscode.window.showWarningMessage('Agentic Gatekeeper: Analysis incomplete — AI provider errors occurred. See Output.');
-                } else if (allChanges.length > 0) {
+                } else if (allChanges.length > 0 || allPatches.length > 0) {
+                    const totalAffected = allChanges.length + allPatches.length;
+
                     if (contextDepth === 'diff') {
-                        this.outputChannel.appendLine(`\nResult: ⚠️ AUDIT ONLY (Diff Mode). Found ${allChanges.length} violation(s), but auto-fix is disabled for partial context.`);
+                        this.outputChannel.appendLine(`\nResult: ⚠️ AUDIT ONLY (Diff Mode). Found ${totalAffected} violation(s), but auto-fix is disabled for partial context.`);
                         this.outputChannel.appendLine(`Switch to Context Depth: "full" in settings to enable auto-patching.`);
-                        vscode.window.showWarningMessage(`Agentic Gatekeeper: ${allChanges.length} violations found. Switch to 'full' mode to auto-fix.`);
+                        vscode.window.showWarningMessage(`Agentic Gatekeeper: ${totalAffected} violations found. Switch to 'full' mode to auto-fix.`);
                     } else if (isDryRun) {
-                        this.outputChannel.appendLine(`\nResult: 🧪 DRY RUN ENABLED. Skipping filesystem patches for ${allChanges.length} file(s).`);
-                        vscode.window.showInformationMessage(`Agentic Gatekeeper (Dry Run): ${allChanges.length} file(s) would have been patched. See Output.`);
+                        this.outputChannel.appendLine(`\nResult: 🧪 DRY RUN ENABLED. Skipping filesystem patches for ${totalAffected} file(s).`);
+                        vscode.window.showInformationMessage(`Agentic Gatekeeper (Dry Run): ${totalAffected} file(s) would have been patched. See Output.`);
                     } else if (executionStrategy === 'continuous') {
-                        this.outputChannel.appendLine(`\nResult: ✅ Continuous Execution Complete. ${allChanges.length} file(s) patched and staged batch-by-batch.`);
-                        vscode.window.showInformationMessage(`Agentic Gatekeeper: Continuous patching complete (${allChanges.length} files).`);
+                        this.outputChannel.appendLine(`\nResult: ✅ Continuous Execution Complete. ${totalAffected} file(s) patched and staged batch-by-batch.`);
+                        vscode.window.showInformationMessage(`Agentic Gatekeeper: Continuous patching complete (${totalAffected} files).`);
                     } else {
-                        this.outputChannel.appendLine(`Result: Applying rules to ${allChanges.length} file(s)...`);
-                        const success = await patcher.applyChanges(allChanges);
-                        if (success) {
-                            await gitContext.stageFiles(allChanges.map(c => c.filePath));
+                        this.outputChannel.appendLine(`Result: Applying rules to ${totalAffected} file(s) (Rewrites: ${allChanges.length}, Patches: ${allPatches.length})...`);
+
+                        let rewritesSuccess = true;
+                        if (allChanges.length > 0) {
+                            rewritesSuccess = await patcher.applyChanges(allChanges);
+                            if (rewritesSuccess) await gitContext.stageFiles(allChanges.map(c => c.filePath));
+                        }
+
+                        let patchesSuccess = true;
+                        if (allPatches.length > 0) {
+                            patchesSuccess = await patcher.applyPatches(allPatches);
+                            if (patchesSuccess) await gitContext.stageFiles(allPatches.map(p => p.filePath));
+                        }
+
+                        if (rewritesSuccess && patchesSuccess) {
                             this.outputChannel.appendLine('Workspace updated and re-staged.');
                             this.outputChannel.appendLine('Final Verification Complete: All identified changes were applied correctly.');
-                            vscode.window.showInformationMessage(`Agentic Gatekeeper: Applied rules to ${allChanges.length} file(s).`);
+                            vscode.window.showInformationMessage(`Agentic Gatekeeper: Applied rules to ${totalAffected} file(s).`);
+                        } else {
+                            vscode.window.showWarningMessage(`Agentic Gatekeeper: Some auto-fixes failed to apply. Please review Output.`);
                         }
                     }
                 } else {

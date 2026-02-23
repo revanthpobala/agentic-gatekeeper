@@ -5,12 +5,13 @@ export interface FileContext {
   filePath: string;
   content: string;
   contentHash?: string;
+  lineCount?: number;
 }
 
 export class AIAgent {
 
   private buildSystemPrompt(instructions: string, contextDepth: string = 'full'): string {
-    return `You are the 'Agentic Gatekeeper'. Your only task is to audit the provided files against the instructions below and fix any violations.
+    return `You are the 'Agentic Gatekeeper'. Your only task is to audit the provided files against the instructions below and fix any violations using FULL FILE REWRITES.
 
 ### AUDIT INSTRUCTIONS:
 ${instructions}
@@ -33,7 +34,38 @@ ${instructions}
 `;
   }
 
-  private buildUserPrompt(files: FileContext[]): string {
+  private buildPatchSystemPrompt(instructions: string, contextDepth: string = 'full'): string {
+    return `You are the 'Agentic Gatekeeper'. Your task is to audit the provided files against the instructions below and fix any violations using PRECISE SEARCH-AND-REPLACE PATCHES.
+
+### AUDIT INSTRUCTIONS:
+${instructions}
+
+### EXECUTION RULES:
+1. If all files are 100% compliant with every rule above, respond with exactly one word: OK
+2. If any file violates a rule, return ONLY a JSON array of patch objects - no explanations, no prose.
+3. Every patch object MUST include a "reason" field explaining which rule was violated.
+4. Every patch object MUST contain "filePath" (the relative path as provided) and a "patches" array.
+5. In the "patches" array, each object must have "search" and "replace" fields.
+6. STRICT ANCHOR DIRECTIVE: Your "search" string MUST include at least 2 lines of unchanged surrounding context above and below the modified lines to ensure a unique match. Do NOT target generic single-line statements without surrounding context.
+7. NEVER put a status word ("OK", "COMPLIANT", "PASS", or similar) as the value of "replace". The "replace" field must always be the real replacement code.
+
+### JSON FORMAT:
+[
+  {
+    "filePath": "string",
+    "reason": "string",
+    "patches": [
+      {
+        "search": "string",
+        "replace": "string"
+      }
+    ]
+  }
+]
+`;
+  }
+
+  private buildUserPrompt(files: FileContext[], batchMode: 'rewrite' | 'patch' = 'rewrite'): string {
     return `Here are the STAGED FILES with their current content:\n\n${files.map(f => `--- File: ${f.filePath} ---\n${f.content}\n`).join('\n')}`;
   }
 
@@ -45,10 +77,11 @@ ${instructions}
     instructions: string,
     files: FileContext[],
     provider: IProvider,
-    contextDepth: string = 'full'
+    contextDepth: string = 'full',
+    batchMode: 'rewrite' | 'patch' = 'rewrite'
   ): Promise<ProviderResult> {
-    const systemPrompt = this.buildSystemPrompt(instructions, contextDepth);
-    const userPrompt = this.buildUserPrompt(files);
+    const systemPrompt = batchMode === 'patch' ? this.buildPatchSystemPrompt(instructions, contextDepth) : this.buildSystemPrompt(instructions, contextDepth);
+    const userPrompt = this.buildUserPrompt(files, batchMode);
 
     const maxAttempts = 3;
     let lastError: Error | null = null;

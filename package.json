@@ -137,6 +137,11 @@
           "default": 20000,
           "description": "Maximum estimated tokens of file content per API request. Files are grouped into batches to minimize redundant rule-token duplication. Lower values (15k-25k) are highly recommended for local LLMs (Ollama/DeepSeek) to prevent stalls."
         },
+        "agenticGatekeeper.largeFileThreshold": {
+          "type": "number",
+          "default": 200,
+          "description": "Files with more lines than this use search-and-replace patch mode instead of full rewrite. Set to 0 to always use full rewrite."
+        },
         "agenticGatekeeper.contextDepth": {
           "type": "string",
           "enum": [
