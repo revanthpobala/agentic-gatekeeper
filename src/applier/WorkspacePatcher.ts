@@ -441,6 +441,9 @@ export class WorkspacePatcher {
                         cleanReplace = cleanReplace.replace(/^```[a-zA-Z]*\s*\n/, '').replace(/\n\s*```$/, '');
                     }
 
+                    // Match the search boundary logic: trim the replacement so we don't multiply boundary whitespace
+                    cleanReplace = cleanReplace.trim();
+
                     validatedEdits.push({
                         range: new vscode.Range(startPos, endPos),
                         newText: cleanReplace
