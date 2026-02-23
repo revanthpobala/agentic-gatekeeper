@@ -6,7 +6,7 @@ Implement a "patch mode" to handle large files more reliably. Instead of rewriti
 
 ### [AI Orchestration]
 
-#### [MODIFY] [AIAgent.ts](file:///Users/revanth/My-Code/Agentic%20Gatekeeper/agentic-gatekeeper/src/ai/AIAgent.ts)
+#### [MODIFY] [AIAgent.ts](src/ai/AIAgent.ts)
 - Update `FileContext` to include `lineCount: number`.
 - Modify `buildUserPrompt` to tag each file header:
   - `--- File: path/to/file.ts (REWRITE MODE) ---`
@@ -19,7 +19,7 @@ Implement a "patch mode" to handle large files more reliably. Instead of rewriti
   - Explicitly forbids placeholders or status words in `replace`.
 - Modify `analyze` to select the system prompt based on a `batchMode` parameter.
 
-#### [MODIFY] [GatekeeperEngine.ts](file:///Users/revanth/My-Code/Agentic%20Gatekeeper/agentic-gatekeeper/src/engine/GatekeeperEngine.ts)
+#### [MODIFY] [GatekeeperEngine.ts](src/engine/GatekeeperEngine.ts)
 - Populate `lineCount` when reading files.
 - Determine `batchMode`: If **any** file in a batch exceeds `agenticGatekeeper.largeFileThreshold`, set `batchMode = 'patch'`.
 - Route the AI response to the appropriate parser and applier:
@@ -30,7 +30,7 @@ Implement a "patch mode" to handle large files more reliably. Instead of rewriti
 
 ### [Workspace Patcher]
 
-#### [MODIFY] [WorkspacePatcher.ts](file:///Users/revanth/My-Code/Agentic%20Gatekeeper/agentic-gatekeeper/src/applier/WorkspacePatcher.ts)
+#### [MODIFY] [WorkspacePatcher.ts](src/applier/WorkspacePatcher.ts)
 - Add interfaces:
   ```typescript
   export interface PatchOperation { search: string; replace: string; }
@@ -60,7 +60,7 @@ Implement a "patch mode" to handle large files more reliably. Instead of rewriti
 
 ### [Configuration]
 
-#### [MODIFY] [package.json](file:///Users/revanth/My-Code/Agentic%20Gatekeeper/agentic-gatekeeper/package.json)
+#### [MODIFY] [package.json](package.json)
 - Add `agenticGatekeeper.largeFileThreshold` (default: 200).
 
 ---
