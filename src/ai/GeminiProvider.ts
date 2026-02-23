@@ -37,6 +37,7 @@ export class GeminiProvider implements IProvider {
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userPrompt }
                 ],
+                max_tokens: 4096,
                 temperature: 0.1
             });
 

@@ -218,10 +218,11 @@ export class GatekeeperEngine {
                 const isConcurrent = config.get<string>('concurrencyMode') === 'Concurrent' && executionStrategy !== 'continuous';
                 const maxTokensPerBatch = config.get<number>('maxTokensPerBatch') || 30000;
 
+                const instructionTokens = estimateTokens(instructions);
+
                 // Smart batching: group files to minimize redundant rule token duplication
                 let batches: FileContext[][] = [];
                 try {
-                    const instructionTokens = estimateTokens(instructions);
                     const batchResult = groupIntoBatches(fileContexts, {
                         maxTokensPerBatch,
                         instructionTokens,
@@ -298,9 +299,9 @@ export class GatekeeperEngine {
                         const promises = concurrentBatches.map(async (batch, idx) => {
                             const batchNum = i + idx + 1;
                             const fileNames = batch.map(f => f.filePath).join(', ');
-                            const batchTokens = batch.reduce((sum, f) => sum + estimateTokens(f.content) + estimateTokens(f.filePath) + 50, 0);
+                            const batchTokens = batch.reduce((sum, f) => sum + estimateTokens(f.content) + estimateTokens(f.filePath) + 50, 0) + instructionTokens;
 
-                            this.outputChannel.appendLine(`  -> Batch ${batchNum}/${batches.length} [${fileNames}]: ${batchTokens.toLocaleString()} tokens. Sending...`);
+                            this.outputChannel.appendLine(`  -> Batch ${batchNum}/${batches.length} [${fileNames}]: ${batchTokens.toLocaleString()} tokens (inc. rules). Sending...`);
 
                             try {
                                 const result = await orchestrator.analyze(instructions, batch, provider, contextDepth);
@@ -373,9 +374,9 @@ export class GatekeeperEngine {
 
                         const batch = batches[i];
                         const fileNames = batch.map(f => f.filePath).join(', ');
-                        const batchTokens = batch.reduce((sum, f) => sum + estimateTokens(f.content) + estimateTokens(f.filePath) + 50, 0);
+                        const batchTokens = batch.reduce((sum, f) => sum + estimateTokens(f.content) + estimateTokens(f.filePath) + 50, 0) + instructionTokens;
 
-                        this.outputChannel.appendLine(`  -> Batch ${i + 1}/${batches.length} [${fileNames}]: ${batchTokens.toLocaleString()} tokens. Sending...`);
+                        this.outputChannel.appendLine(`  -> Batch ${i + 1}/${batches.length} [${fileNames}]: ${batchTokens.toLocaleString()} tokens (inc. rules). Sending...`);
                         progress.report({ message: `Validating batch ${i + 1}/${batches.length} (${batch.length} files)...` });
 
                         try {
