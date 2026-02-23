@@ -2,6 +2,21 @@
 
 All notable changes to the "agentic-gatekeeper" extension will be documented in this file.
 
+## [1.1.8] - 2026-02-23
+### Added
+- **Streaming Execution Strategy**: Final fixes are applied and staged in real-time as batches resolve, drastically reducing perceived wait time.
+- **Improved Patch Mode Reliability**: Implemented whitespace-agnostic fuzzy matching for search-and-replace anchors, ensuring >95% success rate on complex file structures.
+- **.gatekeeperignore Support**: Added native support for gitignore-style exclusion files at the workspace root.
+- **Rule Targeting (Globs)**: Added YAML frontmatter support to rule files (e.g., `globs: "src/**/*.ts"`) to restrict enforcement to specific file patterns.
+- **Diff-Only Auto-Switch**: Files exceeding 1,000 lines automatically switch to a token-efficient "diff contest" mode.
+- **Live Progress Visualization**: Replaced text logs with a native percentage-based progress bar.
+
+### Fixed
+- **Caching Logic Flaw**: Fixed a critical bug where compliant files within mixed-violation batches were not being cached.
+- **No-Op as Compliance**: Identical AI rewrites are now correctly treated as compliance confirmation and cached, eliminating redundant retries.
+- **Cancellation Safety**: Guaranteed that no file writes occur if the user cancels the analysis at any stage.
+- **Audit Labels**: Clarified that estimated costs are approximate.
+
 ## [1.1.2] - Polish & Metadata Stability
 
 ### Added
