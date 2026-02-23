@@ -1,103 +1,88 @@
-# Enhanced Capabilities: Stability & Feature Expansion
+# Technical Blueprint: Safe Patching for Large Files
 
-Implement "Result Caching" to optimize performance and "Violation Explanations" to provide better visibility into AI-driven changes. This phase also includes critical architectural hardening steps.
-
-## User Review Required
-
-> [!IMPORTANT]
-> **Result Caching**: Analysis results will be cached based on file content and rule hashes. Files that previously passed and haven't changed will be skipped. A command to manually clear the cache will be added.
-> **Batch Warning**: New guardrail: if a job exceeds 10 batches (high token cost), the user will be prompted before proceeding.
+Implement a "patch mode" to handle large files more reliably. Instead of rewriting entire files (which risk truncation and high cost), the AI will provide specific search-and-replace patches.
 
 ## Proposed Changes
 
-### [extension.ts](src/extension.ts)
-- Pass `context.workspaceState` to `GatekeeperEngine`.
-- Wrap filesystem operations in `setupInstructions` with try/catch.
-- [NEW] Add command `agentic-gatekeeper.clearCache` to purge `workspaceState` entries.
+### [AI Orchestration]
 
-### [GatekeeperEngine.ts](src/engine/GatekeeperEngine.ts)
-- **Result Caching**: Store ONLY compliant results in `workspaceState` (key: `gatekeeper:cache:<filePath>`). Do NOT cache files that required patches. Hash = `sha256(fileContent + consolidatedInstructions)`.
-- **Sentinels**: Check for `OK` instead of `COMPLIANT`.
-- **Filtering**: Skip `package-lock.json`, `yarn.lock`, `go.sum`, and binary formats.
-- **Sequential Safety**: Set `hasErrors = true` in the sequential batch catch block to prevent false success reports.
-- **Cost Guardrail**: Confirmation prompt if `batches.length > 10`.
-- **Early Exit**: If `rules.length === 0`, stop execution and offer to create `.gatekeeper/global-rules.md`.
-- **Violation Logging**: Output format: `-> Violations found in [file]: "[reason]" - Auto-fix mapped.`
+#### [MODIFY] [AIAgent.ts](file:///Users/revanth/My-Code/Agentic%20Gatekeeper/agentic-gatekeeper/src/ai/AIAgent.ts)
+- Update `FileContext` to include `lineCount: number`.
+- Modify `buildUserPrompt` to tag each file header:
+  - `--- File: path/to/file.ts (REWRITE MODE) ---`
+  - `--- File: path/to/large_file.ts (PATCH MODE - return search/replace patches only) ---`
+- Implement `buildPatchSystemPrompt()`:
+  - Instructs AI to return a JSON array of `FilePatch` objects.
+  - Each `FilePatch` contains `filePath`, `reason`, and an array of `patches` (`search`/`replace` pairs).
+  - **Strict Anchor Directive**: AI must include at least 2 lines of unchanged surrounding context above and below modified lines.
+  - **Context Constraint**: Explicitly forbid targeting generic single-line statements without surrounding context.
+  - Explicitly forbids placeholders or status words in `replace`.
+- Modify `analyze` to select the system prompt based on a `batchMode` parameter.
 
-### [AIAgent.ts](src/ai/AIAgent.ts)
-- **Prompt Evolution**: Use `OK` sentinel. Forbid status words in `newContent`.
-- **Reasoning Prompt**: Explicitly instruct the AI: "Each fix object MUST include a reason field explaining which rule was violated."
-- **JSON Schema**: Add `reason` field as an optional string.
-- **Reliability**: Implement 3-attempt retry loop for 429/503/network errors with exponential backoff.
-### [BatchProcessor.ts](src/engine/BatchProcessor.ts)
-- **Interface Update**: Finalize change of return type to `{ batches, skipped }` to allow graceful handling of oversized files.
+#### [MODIFY] [GatekeeperEngine.ts](file:///Users/revanth/My-Code/Agentic%20Gatekeeper/agentic-gatekeeper/src/engine/GatekeeperEngine.ts)
+- Populate `lineCount` when reading files.
+- Determine `batchMode`: If **any** file in a batch exceeds `agenticGatekeeper.largeFileThreshold`, set `batchMode = 'patch'`.
+- Route the AI response to the appropriate parser and applier:
+  - `rewrite` -> `patcher.parseAIResponse` & `patcher.applyChanges`.
+  - `patch` -> `patcher.parseAIPatchResponse` & `patcher.applyPatches`.
 
-### [WorkspacePatcher.ts](src/applier/WorkspacePatcher.ts)
-- **Path Guard**: Ensure `path.resolve` results stay within `workspaceRoot`.
-- **Hardened Parsing**: Support bare JSON, fenced blocks, and outermost bracket scanning. Validate schema shape.
-- **Junk Filter**: Use regex to reject `newContent` that matches status words (`ok`, `fixed`, etc.).
-- **Atomic Creation**: Check file existence with `fs.stat` before choosing `replace` vs `createFile` to prevent duplicates.
-- **Interactive Safety**: Verify `isDirty` status on open documents before overwriting.
+---
 
-### [AI Providers](src/ai/)
-- **Fallbacks**: Remove local fallbacks for API keys in `execute()`—require keys from factory.
-- **Fail-Fast**: Return `{ content: null }` with an error message immediately if keys are missing.
-- **Gemini**: Correct key mapping to `gemini.model` (lowercase 'g') to match `package.json`.
+### [Workspace Patcher]
 
-### [MarkdownParser.ts](src/engine/MarkdownParser.ts)
-- Replace all `Sync` filesystem calls with `fs.promises` / `vscode.workspace.fs`.
+#### [MODIFY] [WorkspacePatcher.ts](file:///Users/revanth/My-Code/Agentic%20Gatekeeper/agentic-gatekeeper/src/applier/WorkspacePatcher.ts)
+- Add interfaces:
+  ```typescript
+  export interface PatchOperation { search: string; replace: string; }
+  export interface FilePatch { filePath: string; reason?: string; patches: PatchOperation[]; }
+  ```
+- Implement `parseAIPatchResponse(response: string)`:
+  - Similar robust JSON extraction as `parseAIResponse`.
+  - Validates the `FilePatch` shape.
+- Implement `normalizeText(text: string): string`:
+  - Standardizes line endings (`\r\n` -> `\n`), collapses multiple spaces/tabs into a single space, and trims.
+- Implement `findNormalizedMatch(documentText: string, search: string): { found: boolean, isAmbiguous: boolean, range?: vscode.Range }`:
+  - **Normalization**: Create a map of "Original Index -> Normalized Index" to allow mapping normalized match boundaries back to original document coordinates.
+  - **Comparison**: Use a regex-based or sliding-window approach that is insensitive to whitespace variations and line endings.
+  - **Ambiguity Check**: Ensure the normalized `search` string appears exactly once in the normalized `documentText`.
+- Implement `filterPatches(patches: FilePatch[])`:
+  - Rejects empty `search` strings.
+  - Rejects junk/placeholders in `replace`.
+  - Rejects no-op patches (`search === replace`).
+- Implement `applyPatches(patches: FilePatch[])`:
+  - **Transactionality**: For each file, pre-calculate all `vscode.Range` matches. If **any** match fails (not found or ambiguous), abort the entire file update.
+  - **Native Application**: Feed all valid ranges into a single `vscode.WorkspaceEdit` to leverage VS Code's internal conflict resolution.
+  - **Logging**: Log specific reasons for failure (e.g., "Anchor not found: <normalized_preview>") to the output channel.
+- Add size guardrail to `applyChanges`:
+  - Reject full rewrites if the new content is `< 70%` of the original size (likely truncation).
 
-### [GitContext.ts](src/engine/GitContext.ts)
-- Implement `checkIsRepo()` and ensure it is called before fetching status.
+---
 
-### [package.json](package.json)
-- Sync `default` rules: ensure `agents.md` (lowercase) is included to match `MarkdownParser` defaults.
+### [Configuration]
 
-## Phase 3: Bug Audit & Hardening
+#### [MODIFY] [package.json](file:///Users/revanth/My-Code/Agentic%20Gatekeeper/agentic-gatekeeper/package.json)
+- Add `agenticGatekeeper.largeFileThreshold` (default: 200).
 
-Addresses issues identified during post-implementation audit.
-
-### AIAgent & Providers
-- **Retry Loop Restoration**: Providers will now throw transient errors (429, 503, network) instead of catching them and returning `null`. Configuration errors (missing keys) will still return `null` to fail fast.
-
-### MarkdownParser
-- **OS-Agnostic Classification**: Use `path.sep` and normalize all paths to forward slashes before classification to ensure reliable rule application on Windows.
-
-### GatekeeperEngine
-- **Model-Aware Caching**: Include the active `model` ID in the caching hash. This ensures that switching models (e.g., from Gemini to Claude) invalidates the cache, as different models have varying degrees of rule-following precision.
-
-### WorkspacePatcher
-- **JSON Sanitization**: Implement a simple regex to strip trailing commas from AI-generated JSON before parsing, increasing resilience to common LLM formatting slips.
-
-## Phase 4: UI/UX Enhancements
-
-Improving visibility and accessibility of analysis results.
-
-### 1. Status Bar Indicator
-- **Goal**: Persistent visibility of Gatekeeper state.
-- **Logic**: 
-  - `Ready`: Shield icon + "Gatekeeper".
-  - `Analyzing`: Rotating icon + "Analyzing...".
-  - `Violations`: Warning icon + "[N] Issues found".
-
-### 2. Editor Title Integration
-- **Goal**: Quick-access button in the editor.
-- **Change**: Add `agentic-gatekeeper.analyzeStaged` to `editor/title` menu.
-
-### 3. Gatekeeper Side Bar (Tree View)
-- **Goal**: Structured view for violation reports instead of just raw text output.
-- **Components**:
-  - `ViolationProvider`: A TreeDataProvider that parses the last analysis result.
-  - `TreeView`: Registered under the SC (Source Control) container or a new "Gatekeeper" container.
-  - **Tree Nodes**: Files containing violations, with individual "Reasons" as child nodes.
+---
 
 ## Verification Plan
 
 ### Automated Tests
-- Run `npm test` to ensure core parsing and batching remain functional.
-- **Update Tests**: Align `agent.test.ts` and `batching.test.ts` with the `OK` sentinel and the new `BatchResult` return structure.
-- **Caching Tests**: Add unit tests for the caching logic (mocking `workspaceState`).
+- Create `src/test/suite/patcher_patch_mode.test.ts`:
+  - `parseAIPatchResponse`: Validates JSON extraction and shape validation.
+  - `applyPatches`: Mocks VS Code documents to verify bottom-up patch application, anchor matching, and failure handling.
+  - `applyChanges` guardrail: Verifies rejection of truncated rewrites.
+- Update `src/test/suite/agent.test.ts`:
+  - Verify `batchMode` logic selects the correct system prompt.
+
+**Run Tests Command:**
+```bash
+npm run test
+```
 
 ### Manual Verification
-- Test caching: Run Gatekeeper twice on the same staged files; the second run should be nearly instantaneous.
-- Test violation explanations: Verify the output panel displays the "reason" for each suggested fix.
+1. Open a large file (>200 lines).
+2. Create a violation (e.g., add a forbidden pattern).
+3. Run `Agentic Gatekeeper: Analyze Staged Changes`.
+4. Verify the output channel shows "Mode: patch" and applied successfully.
+5. Verify the file was patched correctly without rewriting the whole content.
