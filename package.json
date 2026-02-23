@@ -236,8 +236,7 @@
             "type": "string"
           },
           "default": [
-            ".gatekeeper/agents.md",
-            ".gatekeeper/global-rules.md",
+            ".gatekeeper/*.md",
             "**/*-gatekeeper.md",
             "**/*-instructions.md",
             "AGENTS.md",

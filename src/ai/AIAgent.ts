@@ -61,7 +61,8 @@ ${instructions}
         return result;
       } catch (err: any) {
         lastError = err;
-        const isTransient = /429|503|502|ECONNRESET|ETIMEDOUT|network|timeout/i.test(err?.message || '');
+        const isTransient = /429|503|502|ECONNRESET|ETIMEDOUT|network|timeout/i.test(err?.message || '') &&
+          !/401|403|400/i.test(err?.message || '');
         if (!isTransient || attempt === maxAttempts) { throw err; }
         const delayMs = Math.pow(2, attempt) * 1000; // 2s, 4s
         console.warn(`AIAgent: Attempt ${attempt} failed (${err.message}). Retrying in ${delayMs}ms...`);

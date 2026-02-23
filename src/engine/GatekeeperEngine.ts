@@ -178,28 +178,33 @@ export class GatekeeperEngine {
                     }
 
                     const fullPath = path.join(this.workspaceRoot, relativePath);
-                    if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
-                        let content = '';
-                        if (contextDepth === 'diff') {
-                            content = await gitContext.getStagedDiff(relativePath);
-                            if (!content || content.trim() === '') {
-                                content = fs.readFileSync(fullPath, 'utf8');
+                    try {
+                        const stats = await fs.promises.stat(fullPath);
+                        if (stats.isFile()) {
+                            let content = '';
+                            if (contextDepth === 'diff') {
+                                content = await gitContext.getStagedDiff(relativePath);
+                                if (!content || content.trim() === '') {
+                                    content = await fs.promises.readFile(fullPath, 'utf8');
+                                }
+                            } else {
+                                content = await fs.promises.readFile(fullPath, 'utf8');
                             }
-                        } else {
-                            content = fs.readFileSync(fullPath, 'utf8');
+
+                            // Caching Logic: Check if result is already known to be compliant
+                            const contentHash = this.computeHash(content);
+                            const cacheKey = `gatekeeper:cache:${relativePath}`;
+                            const cached: any = this.workspaceState.get(cacheKey);
+
+                            if (cached && cached.contentHash === contentHash && cached.rulesHash === instructionsHash && cached.result === "OK") {
+                                this.outputChannel.appendLine(`  [Cached] ${relativePath} is Compliant.`);
+                                continue;
+                            }
+
+                            fileContexts.push({ filePath: relativePath, content, contentHash });
                         }
-
-                        // Caching Logic: Check if result is already known to be compliant
-                        const contentHash = this.computeHash(content);
-                        const cacheKey = `gatekeeper:cache:${relativePath}`;
-                        const cached: any = this.workspaceState.get(cacheKey);
-
-                        if (cached && cached.contentHash === contentHash && cached.rulesHash === instructionsHash && cached.result === "OK") {
-                            this.outputChannel.appendLine(`  [Cached] ${relativePath} is Compliant.`);
-                            continue;
-                        }
-
-                        fileContexts.push({ filePath: relativePath, content, contentHash });
+                    } catch (err) {
+                        // Skip files that cannot be read
                     }
                 }
 
@@ -337,7 +342,7 @@ export class GatekeeperEngine {
                                     this.outputChannel.appendLine(`  -> ${f.filePath} is Compliant.`);
                                     // Store in cache
                                     this.workspaceState.update(`gatekeeper:cache:${f.filePath}`, {
-                                        contentHash: (f as any).contentHash,
+                                        contentHash: f.contentHash,
                                         rulesHash: instructionsHash,
                                         result: "OK"
                                     });
@@ -348,7 +353,7 @@ export class GatekeeperEngine {
                                 this.outputChannel.appendLine(`  -> ${f.filePath} is Compliant.`);
                                 // Store in cache
                                 this.workspaceState.update(`gatekeeper:cache:${f.filePath}`, {
-                                    contentHash: (f as any).contentHash,
+                                    contentHash: f.contentHash,
                                     rulesHash: instructionsHash,
                                     result: "OK"
                                 });
@@ -414,7 +419,7 @@ export class GatekeeperEngine {
                                     this.outputChannel.appendLine(`  -> ${f.filePath} is Compliant.`);
                                     // Store in cache
                                     this.workspaceState.update(`gatekeeper:cache:${f.filePath}`, {
-                                        contentHash: (f as any).contentHash,
+                                        contentHash: f.contentHash,
                                         rulesHash: instructionsHash,
                                         result: "OK"
                                     });
