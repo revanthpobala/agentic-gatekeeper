@@ -3,6 +3,7 @@ import { IProvider, ProviderResult } from './IProvider';
 export interface FileContext {
   filePath: string;
   content: string;
+  contentHash?: string;
 }
 
 export class AIAgent {
@@ -16,13 +17,15 @@ ${instructions}
 ### EXECUTION RULES:
 1. If all files are 100% compliant with every rule above, respond with exactly one word: OK
 2. If any file violates a rule, return ONLY a JSON array of fix objects - no explanations, no prose.
-3. Every fix object MUST contain "filePath" (the relative path as provided) and "newContent" (the complete rewritten file contents - never a placeholder, summary, or status word).
-4. NEVER put a status word ("OK", "COMPLIANT", "PASS", or similar) as the value of "newContent". The "newContent" field must always be real file content.
+3. Every fix object MUST include a "reason" field explaining which rule was violated.
+4. Every fix object MUST contain "filePath" (the relative path as provided) and "newContent" (the complete rewritten file contents - never a placeholder, summary, or status word).
+5. NEVER put a status word ("OK", "COMPLIANT", "PASS", or similar) as the value of "newContent". The "newContent" field must always be real file content.
 
 ### JSON FORMAT:
 [
   {
     "filePath": "string",
+    "reason": "string",
     "newContent": "string"
   }
 ]

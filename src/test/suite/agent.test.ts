@@ -17,12 +17,13 @@ suite('AIAgent Integration Test Suite', () => {
         assert.ok(prompt.includes('Agentic Gatekeeper'), 'System prompt should define its role');
         assert.ok(prompt.includes(mockInstructions), 'System prompt should inject the rules');
         assert.ok(prompt.includes('JSON FORMAT'), 'System prompt should define the exact JSON return structure');
+        assert.ok(prompt.includes('reason'), 'System prompt should require a reason field');
     });
 
     test('analyze method handles compliant responses', async () => {
         const agent = new AIAgent();
 
-        // Create a fake AI Provider that always says COMPLIANT
+        // Create a fake AI Provider that always says OK
         const mockProvider: IProvider = {
             execute: async (systemPrompt: string, userPrompt: string): Promise<ProviderResult> => {
                 return { content: "   OK   ", usage: { promptTokens: 100, completionTokens: 5, totalTokens: 105 }, model: 'mock-model' };
@@ -41,7 +42,7 @@ suite('AIAgent Integration Test Suite', () => {
         const agent = new AIAgent();
 
         // Create a fake AI Provider that returns a JSON mutation block
-        const expectedMutation = "[\n  {\n    \"filePath\": \"sample-math.ts\",\n    \"newContent\": \"// Fixed code\"\n  }\n]";
+        const expectedMutation = "[\n  {\n    \"filePath\": \"sample-math.ts\",\n    \"reason\": \"Rule Violation X\",\n    \"newContent\": \"// Fixed code\"\n  }\n]";
         const mockProvider: IProvider = {
             execute: async (systemPrompt: string, userPrompt: string): Promise<ProviderResult> => {
                 return {

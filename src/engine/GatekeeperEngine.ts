@@ -8,6 +8,7 @@ import { AIAgent, FileContext } from '../ai/AIAgent';
 import { AIProviderFactory } from '../ai/AIProviderFactory';
 import { ProviderResult, TokenUsage } from '../ai/IProvider';
 import { groupIntoBatches, estimateTokens } from './BatchProcessor';
+import * as crypto from 'crypto';
 
 // Pricing per 1M tokens (input / output) in USD
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
@@ -40,10 +41,12 @@ interface RunAudit {
 export class GatekeeperEngine {
     private workspaceRoot: string;
     private outputChannel: vscode.OutputChannel;
+    private workspaceState: vscode.Memento;
 
-    constructor(workspaceRoot: string, outputChannel: vscode.OutputChannel) {
+    constructor(workspaceRoot: string, outputChannel: vscode.OutputChannel, workspaceState: vscode.Memento) {
         this.workspaceRoot = workspaceRoot;
         this.outputChannel = outputChannel;
+        this.workspaceState = workspaceState;
     }
 
     private accumulateAudit(audit: RunAudit, result: ProviderResult) {
@@ -56,6 +59,10 @@ export class GatekeeperEngine {
         if (result.model) {
             audit.modelUsed = result.model;
         }
+    }
+
+    private computeHash(content: string): string {
+        return crypto.createHash('sha256').update(content).digest('hex');
     }
 
     private printAudit(audit: RunAudit) {
@@ -85,6 +92,14 @@ export class GatekeeperEngine {
                 cancellable: true
             }, async (progress, token) => {
                 const gitContext = new GitContext(this.workspaceRoot);
+
+                // Pre-flight check: Git presence
+                if (!(await gitContext.checkIsRepo())) {
+                    this.outputChannel.appendLine('Result: Aborted. Workspace is not a Git repository.');
+                    vscode.window.showErrorMessage('Agentic Gatekeeper: This extension requires a Git repository to function.');
+                    return;
+                }
+
                 const markdownParser = new MarkdownParser(this.workspaceRoot, this.outputChannel);
                 const patcher = new WorkspacePatcher(this.workspaceRoot);
                 const orchestrator = new AIAgent();
@@ -108,6 +123,7 @@ export class GatekeeperEngine {
                 }
 
                 const instructions = await markdownParser.getConsolidatedInstructions(rules);
+                const instructionsHash = this.computeHash(instructions);
 
                 // 2. Audit Staged & Modified Files
                 progress.report({ message: "Analyzing local changes..." });
@@ -136,7 +152,7 @@ export class GatekeeperEngine {
                 const skipFilenames = [
                     'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
                     'Cargo.lock', 'poetry.lock', 'Pipfile.lock', 'composer.lock',
-                    'go.sum',
+                    'go.sum', 'package.min.js', 'package.min.css'
                 ];
 
                 const contextDepth = config.get<string>('contextDepth') || 'full';
@@ -169,7 +185,18 @@ export class GatekeeperEngine {
                         } else {
                             content = fs.readFileSync(fullPath, 'utf8');
                         }
-                        fileContexts.push({ filePath: relativePath, content });
+
+                        // Caching Logic: Check if result is already known to be compliant
+                        const contentHash = this.computeHash(content);
+                        const cacheKey = `gatekeeper:cache:${relativePath}`;
+                        const cached: any = this.workspaceState.get(cacheKey);
+
+                        if (cached && cached.contentHash === contentHash && cached.rulesHash === instructionsHash && cached.result === "OK") {
+                            this.outputChannel.appendLine(`  [Cached] ${relativePath} is Compliant.`);
+                            continue;
+                        }
+
+                        fileContexts.push({ filePath: relativePath, content, contentHash });
                     }
                 }
 
@@ -293,24 +320,37 @@ export class GatekeeperEngine {
                             continue;
                         }
 
-                        if (result.content.trim().toUpperCase() !== "COMPLIANT") {
+                        if (result.content.trim().toUpperCase() !== "OK") {
                             const changes = patcher.parseAIResponse(result.content);
                             if (changes && changes.length > 0) {
                                 hasViolations = true;
                                 allChanges.push(...changes);
                                 for (const change of changes) {
-                                    this.outputChannel.appendLine(`  -> Violations found in ${change.filePath}. Auto-fix mapped.`);
+                                    const reason = change.reason || "(no reason provided)";
+                                    this.outputChannel.appendLine(`  -> Violations found in ${change.filePath}: "${reason}" - Auto-fix mapped.`);
                                 }
                             } else {
-                                // If it's not "COMPLIANT" but returned empty JSON, it means the model thinks it's compliant 
-                                // but missed the magic word. We'll treat it as compliant to avoid confusing the user.
+                                // If it's not "OK" but returned empty JSON, it means the model thinks it's compliant 
+                                // but missed the magic word. We'll treat it as compliant and cache it.
                                 for (const f of batch) {
                                     this.outputChannel.appendLine(`  -> ${f.filePath} is Compliant.`);
+                                    // Store in cache
+                                    this.workspaceState.update(`gatekeeper:cache:${f.filePath}`, {
+                                        contentHash: (f as any).contentHash,
+                                        rulesHash: instructionsHash,
+                                        result: "OK"
+                                    });
                                 }
                             }
                         } else {
                             for (const f of batch) {
                                 this.outputChannel.appendLine(`  -> ${f.filePath} is Compliant.`);
+                                // Store in cache
+                                this.workspaceState.update(`gatekeeper:cache:${f.filePath}`, {
+                                    contentHash: (f as any).contentHash,
+                                    rulesHash: instructionsHash,
+                                    result: "OK"
+                                });
                             }
                         }
                     }
@@ -348,7 +388,8 @@ export class GatekeeperEngine {
                                 if (changes && changes.length > 0) {
                                     allChanges.push(...changes);
                                     for (const change of changes) {
-                                        this.outputChannel.appendLine(`  -> Violations found in ${change.filePath}. Auto-fix mapped.`);
+                                        const reason = change.reason || "(no reason provided)";
+                                        this.outputChannel.appendLine(`  -> Violations found in ${change.filePath}: "${reason}" - Auto-fix mapped.`);
                                     }
 
                                     // Continuous Strategy: Apply immediately
@@ -370,6 +411,12 @@ export class GatekeeperEngine {
                             } else {
                                 for (const f of batch) {
                                     this.outputChannel.appendLine(`  -> ${f.filePath} is Compliant.`);
+                                    // Store in cache
+                                    this.workspaceState.update(`gatekeeper:cache:${f.filePath}`, {
+                                        contentHash: (f as any).contentHash,
+                                        rulesHash: instructionsHash,
+                                        result: "OK"
+                                    });
                                 }
                             }
                         } catch (err: any) {

@@ -19,7 +19,7 @@ export class GeminiProvider implements IProvider {
     }
 
     public async execute(systemPrompt: string, userPrompt: string): Promise<ProviderResult> {
-        if (!this.apiKey) {
+        if (!this.apiKey || this.apiKey.trim() === '') {
             vscode.window.showErrorMessage('Agentic Gatekeeper: Gemini API Key is missing. Please configure it in settings.');
             return { content: null, usage: null, model: this.model };
         }

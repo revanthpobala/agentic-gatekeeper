@@ -3,6 +3,7 @@ import * as path from 'path';
 
 export interface FileChange {
     filePath: string;
+    reason?: string;
     newContent: string;
 }
 
@@ -14,9 +15,9 @@ export class WorkspacePatcher {
     }
 
     public parseAIResponse(response: string): FileChange[] {
-        const raw = response.trim()
+        const raw = response.trim();
         const attempt1 = this.tryParseFileChanges(raw);
-        if (attempt1) { return this.filterChanges(attempt1) }
+        if (attempt1) { return this.filterChanges(attempt1); }
 
         const fenceMatch = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
         if (fenceMatch) {
@@ -50,6 +51,7 @@ export class WorkspacePatcher {
                     item !== null &&
                     typeof item.filePath === 'string' &&
                     item.filePath.length > 0 &&
+                    (item.reason === undefined || typeof item.reason === 'string') &&
                     typeof item.newContent === 'string'
             );
             return valid.length > 0 ? valid : null;
@@ -74,11 +76,11 @@ export class WorkspacePatcher {
             const content = change.newContent.trim();
             const lowerContent = content.toLowerCase();
 
-            // Reject single-word/short status responses
-            if (/^(ok|compliant|pass|done|fixed|no\s+violations?)$/i.test(content)) {
+            // Reject single-word/short status responses using accurate regex
+            if (/^(ok|fixed|compliant|pass|done|no\s+violations?)$/i.test(content)) {
                 console.error(`Patcher: REJECTED ${change.filePath} - content is a status word.`);
                 vscode.window.showWarningMessage(
-                    `Agentic Gatekeeper: AI returned a status word as file content for ${change.filePath}. Skipping.`
+                    `Agentic Gatekeeper: AI returned a status word ("${content}") as file content for ${change.filePath}. Skipping.`
                 );
                 return false;
             }
@@ -107,7 +109,7 @@ export class WorkspacePatcher {
         const resolvedChanges: { change: FileChange; uri: vscode.Uri }[] = [];
         for (const change of changes) {
             const resolvedPath = path.resolve(this.workspaceRoot, change.filePath);
-            if (!resolvedPath.startsWith(this.workspaceRoot + path.sep) && resolvedPath !== this.workspaceRoot) {
+            if (!resolvedPath.startsWith(this.workspaceRoot)) {
                 console.error(`Patcher: BLOCKED path traversal: ${change.filePath}`);
                 vscode.window.showWarningMessage(`Agentic Gatekeeper: Blocked unsafe path from AI: ${change.filePath}`);
                 continue;
