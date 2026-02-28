@@ -340,7 +340,8 @@
         "agenticGatekeeper.githubPat": {
           "type": "string",
           "default": "",
-          "description": "GitHub Personal Access Token for syncing rules from private repositories. Paste your ghp_... token here."
+          "description": "GitHub Personal Access Token for syncing rules from private repositories. Paste your ghp_... token here.",
+          "editPresentation": "password"
         }
       }
     }
