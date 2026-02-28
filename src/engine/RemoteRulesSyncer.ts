@@ -192,10 +192,15 @@ export class RemoteRulesSyncer {
         // Collect (sourceUrl, rawContent, destinationFilename) from all configured sources
         const fetched: { sourceUrl: string; content: string; destFilename: string }[] = [];
 
+        // Read PAT from settings (primary) or secrets store (legacy fallback)
+        const settingsPat = config.get<string>('githubPat') ?? '';
+        const secretsPat = await this.secrets.get('agenticGatekeeper.githubPat');
+        const token = settingsPat || secretsPat || undefined;
+
         // Approach 1: raw URLs
         for (const url of rawUrls) {
             try {
-                const content = await fetchUrl(url);
+                const content = await fetchWithOptionalAuth(url, token);
                 // Strip query string and hash before using as filename to avoid
                 // invalid characters on disk (e.g. "rules.md?token=abc")
                 const cleanPath = url.split('?')[0].split('#')[0];
@@ -214,10 +219,6 @@ export class RemoteRulesSyncer {
             } else {
                 const [, owner, repo, folder] = match;
                 try {
-                    // Read PAT from settings (primary) or secrets store (legacy fallback)
-                    const settingsPat = config.get<string>('githubPat') ?? '';
-                    const secretsPat = await this.secrets.get('agenticGatekeeper.githubPat');
-                    const token = settingsPat || secretsPat || undefined;
                     const items = await fetchGitHubTree(owner, repo, folder, token);
                     for (const item of items) {
                         const fileContent = await fetchWithOptionalAuth(item.downloadUrl, token);
