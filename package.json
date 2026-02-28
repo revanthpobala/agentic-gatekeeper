@@ -2,7 +2,7 @@
   "name": "agentic-gatekeeper",
   "displayName": "Agentic Gatekeeper",
   "description": "The industry's first Agentic Rule Enforcer. Automatically compare your Project Ruleset against staged changes and apply full-file patches using Claude, GPT, Qwen, and DeepSeek. Stop technical debt before it hits your branch.",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "publisher": "revanthpobala",
   "author": "Revanth Pobala",
   "license": "SEE LICENSE IN LICENSE.txt",
@@ -62,7 +62,15 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onCommand:agentic-gatekeeper.analyzeStaged",
+    "onCommand:agentic-gatekeeper.configureApiKey",
+    "onCommand:agentic-gatekeeper.setupInstructions",
+    "onCommand:agentic-gatekeeper.clearCache",
+    "onCommand:agentic-gatekeeper.syncRemoteRules",
+    "onCommand:agentic-gatekeeper.setGitHubPat",
+    "onCommand:agentic-gatekeeper.validateRules",
+    "onCommand:agentic-gatekeeper.refreshRemoteRules",
+    "onView:agenticGatekeeper.remoteRules"
   ],
   "main": "./out/extension.js",
   "contributes": {
