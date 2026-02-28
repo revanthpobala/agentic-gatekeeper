@@ -214,7 +214,10 @@ export class RemoteRulesSyncer {
             } else {
                 const [, owner, repo, folder] = match;
                 try {
-                    const token = await this.secrets.get('agenticGatekeeper.githubPat');
+                    // Read PAT from settings (primary) or secrets store (legacy fallback)
+                    const settingsPat = config.get<string>('githubPat') ?? '';
+                    const secretsPat = await this.secrets.get('agenticGatekeeper.githubPat');
+                    const token = settingsPat || secretsPat || undefined;
                     const items = await fetchGitHubTree(owner, repo, folder, token);
                     for (const item of items) {
                         const fileContent = await fetchWithOptionalAuth(item.downloadUrl, token);

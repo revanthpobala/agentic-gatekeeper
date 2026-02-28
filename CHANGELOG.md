@@ -2,19 +2,6 @@
 
 All notable changes to the "agentic-gatekeeper" extension will be documented in this file.
 
-## [1.2.1] - 2026-02-27
-### Added
-- **Remote Rule Sync**: Directly sync `.gatekeeper` rules from any HTTPS URL or GitHub repository.
-- **Rule Validation Command**: New `Agentic Gatekeeper: Validate Rules` command to audit your rules for structural and semantic quality.
-- **Rich Validation Reports**: Interactive webview panel with compliance badges and detailed violation examples.
-- **Opt-Out Sync Model**: Remote rules apply automatically on first sync with a non-blocking "Opt Out" notification.
-- **Refresh Button**: Manual sync trigger in the Remote Rules panel.
-
-### Fixed
-- **Activation Reliability**: Fixed "Command not found" issues in older IDE engines (Antigravity/Cursor) by implementing explicit `onCommand` activation triggers.
-- **Extension Crash Defense**: Added try-catch wrappers around the main activation sequence to surface runtime errors.
-- **UX Refinements**: Added progress bars for LLM-based validations and non-modal diff review for rule updates.
-
 ## [1.2.0] - 2026-02-23
 ### Added
 - **Streaming Execution Strategy**: Final fixes are applied and staged in real-time as batches resolve, drastically reducing perceived wait time.
