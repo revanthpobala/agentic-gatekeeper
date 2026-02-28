@@ -325,7 +325,7 @@
         "agenticGatekeeper.remoteRulesRepo": {
           "type": "string",
           "default": "",
-          "description": "GitHub repository and folder path to sync an entire directory of rules (format: 'owner/repo:path/to/folder'). Uses the GitHub API. Set a GitHub PAT via the 'Set GitHub PAT' command for private repos."
+          "description": "GitHub repository and folder path to sync an entire directory of rules (format: 'owner/repo:path/to/folder'). Uses the GitHub API. Configure your token in the 'Agentic Gatekeeper: GitHub Pat' setting for private repos."
         },
         "agenticGatekeeper.remoteRulesTtlHours": {
           "type": "number",
