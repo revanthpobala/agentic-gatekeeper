@@ -342,6 +342,11 @@
           "default": "",
           "description": "GitHub Personal Access Token for syncing rules from private repositories. Paste your ghp_... token here.",
           "editPresentation": "password"
+        },
+        "agenticGatekeeper.githubEnterpriseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Optional: Full base URL to your GitHub Enterprise Server (e.g., 'https://github.mycompany.com'). Leave blank for public GitHub.com."
         }
       }
     }

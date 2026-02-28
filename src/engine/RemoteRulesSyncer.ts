@@ -69,16 +69,21 @@ async function fetchGitHubTree(
     owner: string,
     repo: string,
     folderPath: string,
-    token?: string
+    token?: string,
+    enterpriseUrl?: string
 ): Promise<{ filePath: string; downloadUrl: string; blobSha: string }[]> {
+    // Determine API and Raw base URLs
+    const apiBase = enterpriseUrl ? `${enterpriseUrl.replace(/\/$/, '')}/api/v3` : 'https://api.github.com';
+    const rawBase = enterpriseUrl ? `${enterpriseUrl.replace(/\/$/, '')}` : 'https://raw.githubusercontent.com';
+
     // Step 1: Resolve the default branch SHA to avoid "HEAD" being rejected by the trees API
-    const repoApiUrl = `https://api.github.com/repos/${owner}/${repo}`;
-    const repoJson = JSON.parse(await fetchWithOptionalAuth(repoApiUrl, token));
+    const repoApiUrl = `${apiBase}/repos/${owner}/${repo}`;
+    const repoJson = JSON.parse(await fetchWithOptionalAuth(repoApiUrl, token, enterpriseUrl));
     const defaultBranch: string = repoJson.default_branch ?? 'main';
 
     // Step 2: Fetch the recursive tree using the resolved branch name
-    const treeApiUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${defaultBranch}?recursive=1`;
-    const treeJson = JSON.parse(await fetchWithOptionalAuth(treeApiUrl, token));
+    const treeApiUrl = `${apiBase}/repos/${owner}/${repo}/git/trees/${defaultBranch}?recursive=1`;
+    const treeJson = JSON.parse(await fetchWithOptionalAuth(treeApiUrl, token, enterpriseUrl));
 
     const results: { filePath: string; downloadUrl: string; blobSha: string }[] = [];
     const normalizedFolder = folderPath.replace(/\/$/, '');
@@ -86,24 +91,42 @@ async function fetchGitHubTree(
         if (item.type !== 'blob') { continue; }
         if (!item.path.startsWith(normalizedFolder + '/')) { continue; }
         if (!item.path.endsWith('.md')) { continue; }
-        const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/${item.path}`;
+        const rawUrl = enterpriseUrl
+            ? `${rawBase}/raw/${owner}/${repo}/${defaultBranch}/${item.path}`
+            : `${rawBase}/${owner}/${repo}/${defaultBranch}/${item.path}`;
         results.push({ filePath: item.path, downloadUrl: rawUrl, blobSha: item.sha as string });
     }
     return results;
 }
 
-function fetchWithOptionalAuth(url: string, token?: string): Promise<string> {
+function fetchWithOptionalAuth(url: string, token?: string, enterpriseUrl?: string): Promise<string> {
     if (!token) { return fetchUrl(url); }
     return new Promise((resolve, reject) => {
         const u = new URL(url);
+
+        // SECURITY: ONLY send the GitHub PAT to official GitHub domains or the user's Enterprise server.
+        let isGitHubDomain = u.hostname.endsWith('github.com') || u.hostname.endsWith('githubusercontent.com');
+        if (enterpriseUrl) {
+            try {
+                if (u.hostname === new URL(enterpriseUrl).hostname) {
+                    isGitHubDomain = true;
+                }
+            } catch { /* malformed enterpriseUrl, ignore */ }
+        }
+
+        const headers: Record<string, string> = {
+            'User-Agent': 'Agentic-Gatekeeper',
+            'Accept': 'application/vnd.github+json'
+        };
+
+        if (isGitHubDomain && token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
         https.get({
             hostname: u.hostname,
             path: u.pathname + u.search,
-            headers: {
-                'User-Agent': 'Agentic-Gatekeeper',
-                'Authorization': `Bearer ${token}`,
-                'Accept': 'application/vnd.github+json'
-            }
+            headers: headers
         }, (res) => {
             if (res.statusCode !== 200) {
                 return reject(new Error(`HTTP ${res.statusCode} for ${url}`));
@@ -146,6 +169,43 @@ export class RemoteRulesSyncer {
         this.workspaceState.update(STATE_KEY, undefined);
     }
 
+    private async checkHostTrust(urlStr: string): Promise<boolean> {
+        try {
+            const host = new URL(urlStr).hostname;
+            if (['github.com', 'api.github.com', 'raw.githubusercontent.com'].includes(host)) {
+                return true;
+            }
+
+            const config = vscode.workspace.getConfiguration('agenticGatekeeper');
+            const enterpriseUrl = config.get<string>('githubEnterpriseUrl');
+            if (enterpriseUrl && host === new URL(enterpriseUrl).hostname) {
+                // If it's their configured GHE url, auto-trust
+                return true;
+            }
+
+            const trustedHosts = this.workspaceState.get<string[]>('trustedHosts') ?? [];
+            if (trustedHosts.includes(host)) {
+                return true;
+            }
+
+            const answer = await vscode.window.showWarningMessage(
+                `Agentic Gatekeeper is attempting to download remote rules from "${host}". Do you recognize and trust this server?`,
+                { modal: true },
+                'Yes, Allow',
+                'No, Block'
+            );
+
+            if (answer === 'Yes, Allow') {
+                trustedHosts.push(host);
+                await this.workspaceState.update('trustedHosts', trustedHosts);
+                return true;
+            }
+            return false;
+        } catch {
+            return false; // Bad URL
+        }
+    }
+
     /**
      * Main entry point. Determines which sync approach to use based on settings,
      * checks TTL + SHA, handles the diff modal on changes, and writes files to disk.
@@ -156,6 +216,7 @@ export class RemoteRulesSyncer {
         const rawUrls: string[] = config.get<string[]>('remoteRulesUrl') ?? [];
         const repoSetting: string = config.get<string>('remoteRulesRepo') ?? '';
         const ttlHours: number = config.get<number>('remoteRulesTtlHours') ?? 24;
+        const enterpriseUrl: string | undefined = config.get<string>('githubEnterpriseUrl') || undefined;
 
         if (rawUrls.length === 0 && !repoSetting) {
             return [];
@@ -200,7 +261,12 @@ export class RemoteRulesSyncer {
         // Approach 1: raw URLs
         for (const url of rawUrls) {
             try {
-                const content = await fetchWithOptionalAuth(url, token);
+                const isTrusted = await this.checkHostTrust(url);
+                if (!isTrusted) {
+                    this.log(`   ✖ Blocked fetch from untrusted host: ${url}`);
+                    continue;
+                }
+                const content = await fetchWithOptionalAuth(url, token, enterpriseUrl);
                 // Strip query string and hash before using as filename to avoid
                 // invalid characters on disk (e.g. "rules.md?token=abc")
                 const cleanPath = url.split('?')[0].split('#')[0];
@@ -219,17 +285,29 @@ export class RemoteRulesSyncer {
             } else {
                 const [, owner, repo, folder] = match;
                 try {
-                    const items = await fetchGitHubTree(owner, repo, folder, token);
-                    for (const item of items) {
-                        const fileContent = await fetchWithOptionalAuth(item.downloadUrl, token);
-                        // Namespace the filename with its relative subfolder to prevent collisions
-                        // e.g. "frontend/rules.md" → "frontend__rules.md" in .gatekeeper/
-                        const normalizedFolder = folder.replace(/\/$/, '');
-                        const relativePath = item.filePath.startsWith(normalizedFolder + '/')
-                            ? item.filePath.slice(normalizedFolder.length + 1)
-                            : item.filePath;
-                        const safeFilename = relativePath.replace(/[\/\\]/g, '__');
-                        fetched.push({ sourceUrl: item.downloadUrl, content: fileContent, destFilename: safeFilename });
+                    // Check trust for API endpoint (especially if enterpriseUrl is customized)
+                    const apiBase = enterpriseUrl ? `${enterpriseUrl.replace(/\/$/, '')}/api/v3` : 'https://api.github.com';
+                    const isApiTrusted = await this.checkHostTrust(apiBase);
+                    if (!isApiTrusted) {
+                        this.log(`   ✖ Blocked GitHub tree fetch from untrusted API: ${apiBase}`);
+                    } else {
+                        const items = await fetchGitHubTree(owner, repo, folder, token, enterpriseUrl);
+                        for (const item of items) {
+                            const isItemTrusted = await this.checkHostTrust(item.downloadUrl);
+                            if (!isItemTrusted) {
+                                this.log(`   ✖ Blocked raw file fetch from untrusted host: ${item.downloadUrl}`);
+                                continue;
+                            }
+                            const fileContent = await fetchWithOptionalAuth(item.downloadUrl, token, enterpriseUrl);
+                            // Namespace the filename with its relative subfolder to prevent collisions
+                            // e.g. "frontend/rules.md" → "frontend__rules.md" in .gatekeeper/
+                            const normalizedFolder = folder.replace(/\/$/, '');
+                            const relativePath = item.filePath.startsWith(normalizedFolder + '/')
+                                ? item.filePath.slice(normalizedFolder.length + 1)
+                                : item.filePath;
+                            const safeFilename = relativePath.replace(/[\/\\]/g, '__');
+                            fetched.push({ sourceUrl: item.downloadUrl, content: fileContent, destFilename: safeFilename });
+                        }
                     }
                 } catch (err: any) {
                     this.log(`   ✖ GitHub API sync failed: ${err.message}`);
