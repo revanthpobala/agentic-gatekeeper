@@ -10,6 +10,7 @@ import { ProviderResult, TokenUsage } from '../ai/IProvider';
 import { groupIntoBatches, estimateTokens } from './BatchProcessor';
 import * as crypto from 'crypto';
 import { minimatch } from 'minimatch';
+import { RemoteRulesSyncer } from './RemoteRulesSyncer';
 
 // Pricing per 1M tokens (input / output) in USD
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
@@ -43,11 +44,13 @@ export class GatekeeperEngine {
     private workspaceRoot: string;
     private outputChannel: vscode.OutputChannel;
     private workspaceState: vscode.Memento;
+    private remoteSync?: RemoteRulesSyncer;
 
-    constructor(workspaceRoot: string, outputChannel: vscode.OutputChannel, workspaceState: vscode.Memento) {
+    constructor(workspaceRoot: string, outputChannel: vscode.OutputChannel, workspaceState: vscode.Memento, remoteSync?: RemoteRulesSyncer) {
         this.workspaceRoot = workspaceRoot;
         this.outputChannel = outputChannel;
         this.workspaceState = workspaceState;
+        this.remoteSync = remoteSync;
     }
 
     private accumulateAudit(audit: RunAudit, result: ProviderResult) {
@@ -134,7 +137,7 @@ export class GatekeeperEngine {
                     return;
                 }
 
-                const markdownParser = new MarkdownParser(this.workspaceRoot, this.outputChannel);
+                const markdownParser = new MarkdownParser(this.workspaceRoot, this.outputChannel, this.remoteSync);
                 const patcher = new WorkspacePatcher(this.workspaceRoot, this.outputChannel);
                 const orchestrator = new AIAgent();
                 const config = vscode.workspace.getConfiguration('agenticGatekeeper');

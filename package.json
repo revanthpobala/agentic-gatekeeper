@@ -86,6 +86,28 @@
       {
         "command": "agentic-gatekeeper.clearCache",
         "title": "Agentic Gatekeeper: Clear Analysis Cache"
+      },
+      {
+        "command": "agentic-gatekeeper.syncRemoteRules",
+        "title": "Agentic Gatekeeper: Sync Remote Rules"
+      },
+      {
+        "command": "agentic-gatekeeper.setGitHubPat",
+        "title": "Agentic Gatekeeper: Set GitHub PAT (for Private Repos)"
+      },
+      {
+        "command": "agentic-gatekeeper.openRuleSource",
+        "title": "Open Source URL",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "agentic-gatekeeper.validateRules",
+        "title": "Agentic Gatekeeper: Validate Rules"
+      },
+      {
+        "command": "agentic-gatekeeper.refreshRemoteRules",
+        "title": "Refresh Remote Rules",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -99,6 +121,39 @@
           "command": "agentic-gatekeeper.clearCache",
           "when": "scmProvider == git",
           "group": "1_gatekeeper"
+        },
+        {
+          "command": "agentic-gatekeeper.syncRemoteRules",
+          "when": "scmProvider == git",
+          "group": "1_gatekeeper"
+        },
+        {
+          "command": "agentic-gatekeeper.validateRules",
+          "when": "scmProvider == git",
+          "group": "1_gatekeeper"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "agentic-gatekeeper.refreshRemoteRules",
+          "when": "view == agenticGatekeeper.remoteRules",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "agentic-gatekeeper.openRuleSource",
+          "when": "view == agenticGatekeeper.remoteRules && viewItem == remoteRuleEntry",
+          "group": "inline"
+        }
+      ]
+    },
+    "views": {
+      "scm": [
+        {
+          "id": "agenticGatekeeper.remoteRules",
+          "name": "Remote Rules",
+          "when": "scmProvider == git"
         }
       ]
     },
@@ -258,6 +313,29 @@
           },
           "default": [],
           "description": "Glob patterns for files/directories to exclude from analysis (e.g., 'scripts/**', 'vendor/**', '*.test.go'). These are in addition to the built-in skip list."
+        },
+        "agenticGatekeeper.remoteRulesUrl": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "List of HTTPS raw URLs pointing to remote Markdown rule files to sync on demand (e.g., 'https://raw.githubusercontent.com/org/repo/main/.gatekeeper/rules.md'). Requires HTTPS."
+        },
+        "agenticGatekeeper.remoteRulesRepo": {
+          "type": "string",
+          "default": "",
+          "description": "GitHub repository and folder path to sync an entire directory of rules (format: 'owner/repo:path/to/folder'). Uses the GitHub API. Set a GitHub PAT via the 'Set GitHub PAT' command for private repos."
+        },
+        "agenticGatekeeper.remoteRulesTtlHours": {
+          "type": "number",
+          "default": 24,
+          "description": "How many hours to cache remote rules before re-fetching. Set to 0 to always re-fetch."
+        },
+        "agenticGatekeeper.remoteRulesEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable remote rule syncing entirely. Set to false to opt out. Can also be toggled via the 'Opt Out' button in the first-sync notification."
         }
       }
     }
