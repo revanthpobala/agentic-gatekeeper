@@ -367,10 +367,13 @@ export class RemoteRulesSyncer {
         }
 
         // Write files to .gatekeeper/remote/ with provenance headers
+        // We completely wipe the directory first to garage-collect orphaned rules
+        // that were deleted from the upstream remote repository.
         const gatekeeperDir = path.join(workspaceRoot, '.gatekeeper', 'remote');
-        if (!fs.existsSync(gatekeeperDir)) {
-            fs.mkdirSync(gatekeeperDir, { recursive: true });
+        if (fs.existsSync(gatekeeperDir)) {
+            fs.rmSync(gatekeeperDir, { recursive: true, force: true });
         }
+        fs.mkdirSync(gatekeeperDir, { recursive: true });
 
         // Ensure this folder is gitignored so doing a sync doesn't dirty the user's tree
         this.ensureGitIgnore(workspaceRoot);
