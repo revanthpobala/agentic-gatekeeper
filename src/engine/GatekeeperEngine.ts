@@ -199,7 +199,20 @@ export class GatekeeperEngine {
                 const skipExact = ['agents.md', 'AGENTS.md', 'CONTRIBUTING.md', 'ARCHITECTURE.md'];
 
                 // Directories to completely ignore anywhere in the path (e.g., dependencies, build outputs)
-                const skipDirectories = ['node_modules', 'dist', 'build', 'out', 'vendor', 'target', '.next', '.nuxt', '.svelte-kit', 'coverage'];
+                const skipDirectories = [
+                    // Node / Web
+                    'node_modules', 'dist', 'build', 'out', '.next', '.nuxt', '.svelte-kit', 'coverage',
+                    // Python
+                    'venv', '.venv', 'env', '.env', '__pycache__', '.pytest_cache', '.tox', 'eggs',
+                    // PHP / Go / Ruby
+                    'vendor',
+                    // Java / C# / Rust
+                    'target', 'bin', 'obj', '.gradle',
+                    // iOS / macOS
+                    'Pods', 'DerivedData',
+                    // IDEs
+                    '.idea', '.vs'
+                ];
 
                 // File extensions that are never useful to send to an LLM
                 const skipExtensions = [
