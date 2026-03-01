@@ -199,7 +199,7 @@ The cache automatically invalidates. It tracks both file content and rule versio
 <details>
 <summary><strong>Can the AI accidentally destroy my file?</strong></summary>
 
-The Patcher has built-in safety checks. If the AI produces a rewrite that suspiciously reduces the file size (a sign of truncation or hallucination), the patch is **rejected** and your original file is preserved untouched.
+The Patcher has built-in safety checks. If the AI produces a rewrite that suspiciously reduces the file size (a sign of truncation or hallucination), the patch is **rejected** and your original file is preserved untouched. Additionally, because the extension natively patches your local workspace files, you can always perform a **git diff** to inspect and verify every single line of code before you commit.
 </details>
 
 ---
