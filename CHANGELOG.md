@@ -2,7 +2,14 @@
 
 All notable changes to the "agentic-gatekeeper" extension will be documented in this file.
 
-## [1.3.0] - 2026-02-28
+## [1.3.0] - 2026-03-01
+### Added
+- **Remote Rules Synchronization:** Pull shared engineering standards from a central GitHub repository (`owner/repo` or `owner/repo:path/to/folder`). Rules are SHA-cached in `.gatekeeper/remote/` and auto-applied on every analysis.
+- **Remote Rules Tree View:** Visual sidebar panel in Source Control showing all synced remote rules with one-click navigation to the upstream GitHub source.
+- **Validate Rules Command:** New `Agentic Gatekeeper: Validate Rules` command that sends each rule to the AI for a semantic audit. Generates a full Rule Report with enforceability ratings, targets, and side-by-side violation/compliant code examples.
+- **esbuild Bundling:** Migrated the entire build pipeline from raw `tsc` to esbuild. The extension now ships as a single 262 KB bundled `out/extension.js` — eliminating the 17.78 MB `node_modules` folder from the VSIX package.
+- **FAQ Section:** Added a comprehensive collapsible FAQ to the README addressing privacy, `.gatekeeperignore`, provider flexibility, monorepo support, cache invalidation, and patcher safety.
+
 ### Security & Compliance
 - **GitHub Fine-Grained PAT Support:** Completely rerouted authenticated downloads to the internal GitHub Git Blobs REST API. This securely bypasses CDN blocks that were rejecting Fine-Grained PATs with a 404.
 - **Protocol Downgrade Protection:** HTTP Redirect chains that attempt to route traffic outside of strict `https://` endpoints are physically blocked.
@@ -12,6 +19,12 @@ All notable changes to the "agentic-gatekeeper" extension will be documented in 
 - **Transparent Glob Migration:** Automatically migrates existing configurations from `.gatekeeper/*.md` to recursive `.gatekeeper/**/*.md`. Ensures seamless discovery of isolated remote rules for users upgrading from v1.2.x.
 - **Perfect Garbage Collection:** Remote rules that are deleted from the upstream source are now immediately unlinked from the local cache cleanly. File edits correctly map to their existing provenance headers without destroying state.
 - **Tamper Resistance:** SHA matching logic now individually asserts the literal physical disk presence `fs.existsSync` of every expected cached rule. Deleting a remote rule locally instantly shatters the short-circuit cache and restores the file.
+
+### Fixed
+- **RuleValidator Prompt:** Fixed overly strict system prompt that was causing the LLM to rate valid natural language rules as "PARTIALLY" enforceable instead of "YES".
+
+### Changed
+- Updated all dependencies to latest minor/patch versions (openai 6.25.0, simple-git 3.32.3, minimatch 10.2.4, etc.).
 
 ## [1.2.0] - 2026-02-23
 ### Added
