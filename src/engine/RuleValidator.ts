@@ -31,11 +31,11 @@ Respond ONLY with a JSON object in this exact format — no prose, no markdown f
 }
 
 Criteria:
-- YES: The rule provides clear technical directives that an AI can reasonably understand and enforce. Natural language is perfectly fine.
-- PARTIALLY: The core technical directive is unclear, mixes conflicting instructions, or requires heavy assumption.
-- NO: The rule is entirely philosophical, non-technical, or impossible to enforce via static code changes (e.g., "write good code", "be a team player").
+- YES: The rule contains ANY technical instruction, architectural pattern, coding standard, or restriction. Natural language is perfectly acceptable and MUST be rated YES.
+- PARTIALLY: The rule is primarily non-technical or purely philosophical ("write good code", "be a team player"), with only minor or vague technical hints.
+- NO: The rule is completely empty or completely irrelevant to programming.
 
-NOTE: Be highly lenient. Prefer YES unless the rule is genuinely useless for automated code patching.`;
+CRITICAL INSTRUCTION: You MUST aggressively classify rules as "YES". Do not use "PARTIALLY" for standard coding guidelines, even if they are written informally. If the rule can be understood by an AI coder, it is "YES".`;
 }
 
 function buildValidatorUserPrompt(ruleContent: string): string {
