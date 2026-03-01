@@ -2,6 +2,17 @@
 
 All notable changes to the "agentic-gatekeeper" extension will be documented in this file.
 
+## [1.3.0] - 2026-02-28
+### Security & Compliance
+- **GitHub Fine-Grained PAT Support:** Completely rerouted authenticated downloads to the internal GitHub Git Blobs REST API. This securely bypasses CDN blocks that were rejecting Fine-Grained PATs with a 404.
+- **Protocol Downgrade Protection:** HTTP Redirect chains that attempt to route traffic outside of strict `https://` endpoints are physically blocked.
+- **Infinite Redirect Loop Guards:** Built a hard maximum recursion depth (5 limit) into the sync engine to prevent malicious or misconfigured remote servers from stack overflowing the IDE Extension Host.
+
+### Rules Discovery
+- **Transparent Glob Migration:** Automatically migrates existing configurations from `.gatekeeper/*.md` to recursive `.gatekeeper/**/*.md`. Ensures seamless discovery of isolated remote rules for users upgrading from v1.2.x.
+- **Perfect Garbage Collection:** Remote rules that are deleted from the upstream source are now immediately unlinked from the local cache cleanly. File edits correctly map to their existing provenance headers without destroying state.
+- **Tamper Resistance:** SHA matching logic now individually asserts the literal physical disk presence `fs.existsSync` of every expected cached rule. Deleting a remote rule locally instantly shatters the short-circuit cache and restores the file.
+
 ## [1.2.0] - 2026-02-23
 ### Added
 - **Streaming Execution Strategy**: Final fixes are applied and staged in real-time as batches resolve, drastically reducing perceived wait time.
