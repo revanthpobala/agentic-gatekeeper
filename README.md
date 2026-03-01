@@ -43,6 +43,9 @@ To configure remote synchronization:
 
 The Extension intelligently connects to the GitHub Data Trees API, securely downloads the `.md` rule files, caches their signature SHAs to eliminate redundant network fetches, and dynamically injects them into a Git-ignored `.gatekeeper/remote/` directory for immediate Gatekeeper enforcement.
 
+> [!TIP]
+> **View a live example repository:** Check out [agentic-gatekeeper-rules](https://github.com/revanthpobala/agentic-gatekeeper-rules/tree/main) to see how to structure your global rule definitions and use Glob matching to target specific tech stacks.
+
 ### Rule Scopes (Where to put your markdown rules)
 ![Markdown Local Rules vs Global Rules](images/2.png)
 
