@@ -92,7 +92,7 @@ async function fetchGitHubTree(
     const normalizedFolder = folderPath.replace(/\/$/, '');
     for (const item of treeJson.tree ?? []) {
         if (item.type !== 'blob') { continue; }
-        if (!item.path.startsWith(normalizedFolder + '/')) { continue; }
+        if (normalizedFolder && !item.path.startsWith(normalizedFolder + '/')) { continue; }
         if (!item.path.endsWith('.md')) { continue; }
         // If we are authenticated, we must use the REST API blob URL instead of raw.githubusercontent.com.
         // GitHub Fine-grained PATs cannot access raw.githubusercontent.com and will return 404.
