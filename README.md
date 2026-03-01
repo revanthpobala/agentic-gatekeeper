@@ -33,6 +33,19 @@ Teams invest heavily in documenting their engineering standards — architecture
 
 > Your rules can be **literally anything**: strict typing, component architecture, security guardrails, naming conventions, or formatting preferences. If you can write it in Markdown, the Gatekeeper can enforce it.
 
+### 🔍 Validate Rules — Audit Your Rules Before Enforcing
+
+Not sure if your rules are specific enough? Run **`Agentic Gatekeeper: Validate Rules`** from the Source Control overflow menu to generate a full **Rule Report**.
+
+![Validate Rules Report](images/validate-rules.png)
+
+The Gatekeeper sends each rule to the AI for a semantic audit and returns:
+- **Enforceability Rating** — `YES`, `PARTIALLY`, or `NO` based on how measurable and specific the rule is.
+- **Targets** — What file types and directories the rule applies to.
+- **Violation vs. Compliant** — Side-by-side code examples showing what breaks the rule and what satisfies it.
+
+This lets you iteratively tighten vague rules until they are fully enforceable — before they ever touch production code.
+
 ---
 
 ## 🔄 Remote Rules — Enforce Standards Across Your Entire Org
