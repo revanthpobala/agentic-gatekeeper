@@ -198,9 +198,13 @@ export class RemoteRulesSyncer {
 
             const config = vscode.workspace.getConfiguration('agenticGatekeeper');
             const enterpriseUrl = config.get<string>('githubEnterpriseUrl');
-            if (enterpriseUrl && host === new URL(enterpriseUrl).hostname) {
-                // If it's their configured GHE url, auto-trust
-                return true;
+            if (enterpriseUrl) {
+                try {
+                    if (host === new URL(enterpriseUrl).hostname) {
+                        // If it's their configured GHE url, auto-trust
+                        return true;
+                    }
+                } catch { /* malformed url, ignore and proceed to prompt */ }
             }
 
             const trustedHosts = this.workspaceState.get<string[]>('trustedHosts') ?? [];
@@ -367,13 +371,21 @@ export class RemoteRulesSyncer {
         }
 
         // Write files to .gatekeeper/remote/ with provenance headers
-        // We completely wipe the directory first to garage-collect orphaned rules
-        // that were deleted from the upstream remote repository.
         const gatekeeperDir = path.join(workspaceRoot, '.gatekeeper', 'remote');
-        if (fs.existsSync(gatekeeperDir)) {
-            fs.rmSync(gatekeeperDir, { recursive: true, force: true });
+        if (!fs.existsSync(gatekeeperDir)) {
+            fs.mkdirSync(gatekeeperDir, { recursive: true });
         }
-        fs.mkdirSync(gatekeeperDir, { recursive: true });
+
+        // Garbage collect orphaned rules that were deleted from the upstream remote repository
+        const validFilenames = fetched.map(f => f.destFilename);
+        const existingFiles = fs.readdirSync(gatekeeperDir);
+        for (const file of existingFiles) {
+            const fullPath = path.join(gatekeeperDir, file);
+            if (fs.statSync(fullPath).isFile() && !validFilenames.includes(file) && file.endsWith('.md')) {
+                fs.unlinkSync(fullPath);
+                this.log(`   ✖ Deleted orphaned remote rule: ${file}`);
+            }
+        }
 
         // Ensure this folder is gitignored so doing a sync doesn't dirty the user's tree
         this.ensureGitIgnore(workspaceRoot);
@@ -434,7 +446,7 @@ export class RemoteRulesSyncer {
         workspaceRoot: string,
         now: string
     ): Promise<void> {
-        const tmpDir = path.join(workspaceRoot, '.gatekeeper', 'remote', '.sync-diff-tmp');
+        const tmpDir = path.join(workspaceRoot, '.gatekeeper', '.sync-diff-tmp');
         fs.mkdirSync(tmpDir, { recursive: true });
         const baseName = file.destFilename.replace(/\.md$/, '');
         const previewPath = path.join(tmpDir, `PREVIEW__${baseName}.txt`);
@@ -468,7 +480,7 @@ export class RemoteRulesSyncer {
         const incomingContent = buildProvenanceHeader(first.sourceUrl, sha256(first.content), now) + first.content;
 
         // Write temp files as .txt so MarkdownParser's .gatekeeper/**/*.md glob never picks them up
-        const tmpDir = path.join(workspaceRoot, '.gatekeeper', 'remote', '.sync-diff-tmp');
+        const tmpDir = path.join(workspaceRoot, '.gatekeeper', '.sync-diff-tmp');
         fs.mkdirSync(tmpDir, { recursive: true });
         const baseName = first.destFilename.replace(/\.md$/, '');
         const oldTmp = path.join(tmpDir, `OLD__${baseName}.txt`);
