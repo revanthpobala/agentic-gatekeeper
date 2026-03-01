@@ -132,6 +132,9 @@ function fetchWithOptionalAuth(url: string, token?: string, enterpriseUrl?: stri
         }, (res) => {
             if (res.statusCode && [301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
                 const redirectUrl = new URL(res.headers.location, url).toString();
+                if (!redirectUrl.startsWith('https:')) {
+                    return reject(new Error(`Insecure redirect blocked: ${url} attempted to redirect to non-HTTPS URL ${redirectUrl}`));
+                }
                 return resolve(fetchWithOptionalAuth(redirectUrl, token, enterpriseUrl));
             } else if (res.statusCode !== 200) {
                 return reject(new Error(`HTTP ${res.statusCode} for ${url}`));
