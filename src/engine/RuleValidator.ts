@@ -31,9 +31,11 @@ Respond ONLY with a JSON object in this exact format — no prose, no markdown f
 }
 
 Criteria:
-- YES: The rule is specific, unambiguous, and can be mechanically verified on code.
-- PARTIALLY: The rule has some enforceable aspects but contains vague or subjective language.
-- NO: The rule is too vague, generic, or subjective to enforce reliably on code.`;
+- YES: The rule provides clear technical directives that an AI can reasonably understand and enforce. Natural language is perfectly fine.
+- PARTIALLY: The core technical directive is unclear, mixes conflicting instructions, or requires heavy assumption.
+- NO: The rule is entirely philosophical, non-technical, or impossible to enforce via static code changes (e.g., "write good code", "be a team player").
+
+NOTE: Be highly lenient. Prefer YES unless the rule is genuinely useless for automated code patching.`;
 }
 
 function buildValidatorUserPrompt(ruleContent: string): string {
