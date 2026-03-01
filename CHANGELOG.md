@@ -20,9 +20,6 @@ All notable changes to the "agentic-gatekeeper" extension will be documented in 
 - **Perfect Garbage Collection:** Remote rules that are deleted from the upstream source are now immediately unlinked from the local cache cleanly. File edits correctly map to their existing provenance headers without destroying state.
 - **Tamper Resistance:** SHA matching logic now individually asserts the literal physical disk presence `fs.existsSync` of every expected cached rule. Deleting a remote rule locally instantly shatters the short-circuit cache and restores the file.
 
-### Fixed
-- **RuleValidator Prompt:** Fixed overly strict system prompt that was causing the LLM to rate valid natural language rules as "PARTIALLY" enforceable instead of "YES".
-
 ### Changed
 - Updated all dependencies to latest minor/patch versions (openai 6.25.0, simple-git 3.32.3, minimatch 10.2.4, etc.).
 
