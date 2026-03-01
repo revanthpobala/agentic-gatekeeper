@@ -198,6 +198,9 @@ export class GatekeeperEngine {
                 const skipPrefixes = ['.gatekeeper/', '.cursor/', '.github/', '.agents/'];
                 const skipExact = ['agents.md', 'AGENTS.md', 'CONTRIBUTING.md', 'ARCHITECTURE.md'];
 
+                // Directories to completely ignore anywhere in the path (e.g., dependencies, build outputs)
+                const skipDirectories = ['node_modules', 'dist', 'build', 'out', 'vendor', 'target', '.next', '.nuxt', '.svelte-kit', 'coverage'];
+
                 // File extensions that are never useful to send to an LLM
                 const skipExtensions = [
                     '.lock', '.snap', '.map', '.min.js', '.min.css',
@@ -226,6 +229,7 @@ export class GatekeeperEngine {
                     );
 
                     let shouldSkip = skipPrefixes.some(p => relativePath.startsWith(p)) ||
+                        skipDirectories.some(d => relativePath.split(/[/\\]/).includes(d)) ||
                         skipExact.includes(relativePath) ||
                         relativePath.endsWith('-gatekeeper.md') ||
                         relativePath.endsWith('-instructions.md') ||
