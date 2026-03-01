@@ -133,9 +133,17 @@ function fetchWithOptionalAuth(
         };
 
         if (isGitHubDomain) {
-            headers['Accept'] = acceptHeader;
+            // raw.githubusercontent.com is a CDN, not the API. It uses 'token' instead of 'Bearer'
+            // and does not expect the API-specific Accept header.
+            const isCdn = u.hostname.endsWith('githubusercontent.com') || (enterpriseUrl && u.pathname.startsWith('/raw/'));
+
+            if (!isCdn) {
+                headers['Accept'] = acceptHeader;
+            }
+
             if (token) {
-                headers['Authorization'] = `Bearer ${token.trim()}`;
+                const prefix = isCdn ? 'token' : 'Bearer';
+                headers['Authorization'] = `${prefix} ${token.trim()}`;
             }
         }
 
