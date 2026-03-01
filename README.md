@@ -28,6 +28,21 @@ The Agentic Gatekeeper is a localized, autonomous AI Agent that acts as a strict
 3. **Run the Gatekeeper**: Click the Shield icon in the Source Control view header.
 4. **Autonomous Auto-Patching**: The Gatekeeper spawns parallel AI agents, evaluates your staged code against your rules, and natively patches any violations—automatically re-staging the corrected files!
 
+### Remote Rules Synchronization (Cross-Team Standards)
+
+![Remote Rules Sync Demo](images/remote-file-sync-demo-high.gif)
+
+If your organization has centralized engineering standards, Agentic Gatekeeper can dynamically sync rule files natively from a remote GitHub repository. This guarantees that all developers across your organization validate their code against the exact same architectural directives, without manually copying Markdown files between projects.
+
+To configure remote synchronization:
+1. Open your VS Code Settings and define your `Agentic Gatekeeper: Remote Rules Repo` in the format `owner/repo` (e.g., `revanthpobala/agentic-gatekeeper-rules`). You can optionally append a subdirectory (e.g., `owner/repo:path/to/rules`).
+2. For private repositories or custom enterprise hosts, configure your Personal Access Token in `Agentic Gatekeeper: GitHub Pat` and your host url in `Agentic Gatekeeper: Github Enterprise Url`.
+3. Open the Command Palette (`Cmd+Shift+P` on Mac) and execute **`Agentic Gatekeeper: Sync Remote Rules`**:
+
+![Sync Remote Rules Command](images/remote-sync-command.png)
+
+The Extension intelligently connects to the GitHub Data Trees API, securely downloads the `.md` rule files, caches their signature SHAs to eliminate redundant network fetches, and dynamically injects them into a Git-ignored `.gatekeeper/remote/` directory for immediate Gatekeeper enforcement.
+
 ### Rule Scopes (Where to put your markdown rules)
 ![Markdown Local Rules vs Global Rules](images/2.png)
 
