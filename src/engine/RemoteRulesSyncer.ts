@@ -162,6 +162,26 @@ export class RemoteRulesSyncer {
         return meta?.entries ?? [];
     }
 
+    private ensureGitIgnore(workspaceRoot: string) {
+        try {
+            const gitignorePath = path.join(workspaceRoot, '.gitignore');
+            const ignoreEntry = '\n# Agentic Gatekeeper\n.gatekeeper/remote/\n';
+
+            if (fs.existsSync(gitignorePath)) {
+                const content = fs.readFileSync(gitignorePath, 'utf8');
+                if (!content.includes('.gatekeeper/remote/')) {
+                    fs.appendFileSync(gitignorePath, ignoreEntry, 'utf8');
+                    this.log('Added .gatekeeper/remote/ to .gitignore');
+                }
+            } else {
+                fs.writeFileSync(gitignorePath, ignoreEntry.trim() + '\n', 'utf8');
+                this.log('Created .gitignore with .gatekeeper/remote/');
+            }
+        } catch (e: any) {
+            this.log(`Failed to update .gitignore: ${e.message}`);
+        }
+    }
+
     public clearCache() {
         // Only clear the TTL/SHA cache, NOT the trusted-sources approval list.
         // The user shouldn't need to re-approve sources they already trusted just
@@ -346,11 +366,14 @@ export class RemoteRulesSyncer {
             }
         }
 
-        // Write files to .gatekeeper/ with provenance headers
-        const gatekeeperDir = path.join(workspaceRoot, '.gatekeeper');
+        // Write files to .gatekeeper/remote/ with provenance headers
+        const gatekeeperDir = path.join(workspaceRoot, '.gatekeeper', 'remote');
         if (!fs.existsSync(gatekeeperDir)) {
             fs.mkdirSync(gatekeeperDir, { recursive: true });
         }
+
+        // Ensure this folder is gitignored so doing a sync doesn't dirty the user's tree
+        this.ensureGitIgnore(workspaceRoot);
 
         const entries: SyncedRuleEntry[] = [];
         for (const { sourceUrl, content, destFilename } of fetched) {
@@ -408,7 +431,7 @@ export class RemoteRulesSyncer {
         workspaceRoot: string,
         now: string
     ): Promise<void> {
-        const tmpDir = path.join(workspaceRoot, '.gatekeeper', '.sync-diff-tmp');
+        const tmpDir = path.join(workspaceRoot, '.gatekeeper', 'remote', '.sync-diff-tmp');
         fs.mkdirSync(tmpDir, { recursive: true });
         const baseName = file.destFilename.replace(/\.md$/, '');
         const previewPath = path.join(tmpDir, `PREVIEW__${baseName}.txt`);
@@ -435,14 +458,14 @@ export class RemoteRulesSyncer {
         if (!workspaceRoot) { return; }
 
         const first = fetched[0];
-        const localPath = path.join(workspaceRoot, '.gatekeeper', first.destFilename);
+        const localPath = path.join(workspaceRoot, '.gatekeeper', 'remote', first.destFilename);
         const oldContent = fs.existsSync(localPath)
             ? fs.readFileSync(localPath, 'utf8')
             : '(no existing file)';
         const incomingContent = buildProvenanceHeader(first.sourceUrl, sha256(first.content), now) + first.content;
 
-        // Write temp files as .txt so MarkdownParser's .gatekeeper/*.md glob never picks them up
-        const tmpDir = path.join(workspaceRoot, '.gatekeeper', '.sync-diff-tmp');
+        // Write temp files as .txt so MarkdownParser's .gatekeeper/**/*.md glob never picks them up
+        const tmpDir = path.join(workspaceRoot, '.gatekeeper', 'remote', '.sync-diff-tmp');
         fs.mkdirSync(tmpDir, { recursive: true });
         const baseName = first.destFilename.replace(/\.md$/, '');
         const oldTmp = path.join(tmpDir, `OLD__${baseName}.txt`);

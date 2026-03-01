@@ -13,7 +13,7 @@ export class MarkdownParser {
     private remoteSync?: RemoteRulesSyncer;
 
     private static readonly DEFAULT_RULES_FILES = [
-        '.gatekeeper/*.md',
+        '.gatekeeper/**/*.md',
         '**/*-gatekeeper.md',
         '**/*-instructions.md',
         'agents.md',

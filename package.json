@@ -297,7 +297,7 @@
             "type": "string"
           },
           "default": [
-            ".gatekeeper/*.md",
+            ".gatekeeper/**/*.md",
             "**/*-gatekeeper.md",
             "**/*-instructions.md",
             "AGENTS.md",
