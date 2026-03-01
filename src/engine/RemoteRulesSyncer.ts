@@ -199,6 +199,8 @@ export class RemoteRulesSyncer {
                 trustedHosts.push(host);
                 await this.workspaceState.update('trustedHosts', trustedHosts);
                 return true;
+            } else if (answer === 'No, Block') {
+                vscode.window.showInformationMessage(`Agentic Gatekeeper: Blocked remote rules fetch from "${host}".`);
             }
             return false;
         } catch {
