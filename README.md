@@ -130,7 +130,35 @@ By default, the Gatekeeper uses your **Native IDE Model** (Copilot/Gemini). For 
 1. Open the Command Palette → **`Agentic Gatekeeper: Configure API Key`**
 2. Choose your provider and paste your key.
 
-### FAQ
+### Supported Providers
+
+| Provider | Description | Required Setting |
+| :--- | :--- | :--- |
+| **Native IDE** (Default) | Built-in Copilot or Gemini. Zero setup. | None |
+| **Anthropic** | Claude models (e.g., `claude-4.5-sonnet`). Highest reasoning. | `Anthropic API Key` |
+| **OpenAI** | GPT models (e.g., `gpt-5.2`). Fast and consistent. | `OpenAI API Key` |
+| **Google Gemini** | Gemini models (e.g., `gemini-3-pro`). Huge context windows. | `Gemini API Key` |
+| **OpenRouter** | Universal bridge to DeepSeek, Llama, Grok, and hundreds more. | `OpenRouter API Key` |
+| **Custom (Local)** | Ollama, LM Studio, or any OpenAI-compatible local server. | `Custom Base URL` |
+
+<details>
+<summary><strong>Local Models (Ollama / LM Studio)</strong></summary>
+
+- **Custom Base URL**: e.g., `http://localhost:11434/v1`
+- **Custom Model**: e.g., `llama3` or `qwen2.5-coder`
+- **Custom API Key**: Usually `lm-studio` or `ollama`
+</details>
+
+<details>
+<summary><strong>OpenRouter Headers</strong></summary>
+
+- **OpenRouter Referer**: Your project's URL.
+- **OpenRouter Title**: Your app's display name.
+</details>
+
+---
+
+## ❓ FAQ
 
 <details>
 <summary><strong>Does this send my code to an external server?</strong></summary>
@@ -162,32 +190,6 @@ Yes. Use directory-scoped rules (`*-gatekeeper.md`) and `globs:` frontmatter to 
 <summary><strong>How do I force a re-analysis on files that haven't changed?</strong></summary>
 
 Open the Source Control overflow menu → **Agentic Gatekeeper: Clear Analysis Cache**. The cache tracks both file content and rule versions, so it will also auto-invalidate when you update your rules.
-</details>
-
-### Supported Providers
-
-| Provider | Description | Required Setting |
-| :--- | :--- | :--- |
-| **Native IDE** (Default) | Built-in Copilot or Gemini. Zero setup. | None |
-| **Anthropic** | Claude models (e.g., `claude-4.5-sonnet`). Highest reasoning. | `Anthropic API Key` |
-| **OpenAI** | GPT models (e.g., `gpt-5.2`). Fast and consistent. | `OpenAI API Key` |
-| **Google Gemini** | Gemini models (e.g., `gemini-3-pro`). Huge context windows. | `Gemini API Key` |
-| **OpenRouter** | Universal bridge to DeepSeek, Llama, Grok, and hundreds more. | `OpenRouter API Key` |
-| **Custom (Local)** | Ollama, LM Studio, or any OpenAI-compatible local server. | `Custom Base URL` |
-
-<details>
-<summary><strong>Local Models (Ollama / LM Studio)</strong></summary>
-
-- **Custom Base URL**: e.g., `http://localhost:11434/v1`
-- **Custom Model**: e.g., `llama3` or `qwen2.5-coder`
-- **Custom API Key**: Usually `lm-studio` or `ollama`
-</details>
-
-<details>
-<summary><strong>OpenRouter Headers</strong></summary>
-
-- **OpenRouter Referer**: Your project's URL.
-- **OpenRouter Title**: Your app's display name.
 </details>
 
 ---
