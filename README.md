@@ -167,9 +167,13 @@ Only if you configure an external AI provider (Anthropic, OpenAI, etc.). The def
 </details>
 
 <details>
-<summary><strong>Why did the Gatekeeper skip my file?</strong></summary>
+<summary><strong>Why did the Gatekeeper skip or ignore my file?</strong></summary>
 
-Check three things: (1) your `.gatekeeperignore` patterns, (2) the `globs:` frontmatter in your rule files, and (3) the analysis cache. To force a re-analysis, open the Source Control overflow menu and select **Agentic Gatekeeper: Clear Analysis Cache**.
+Check these in order:
+1. **`.gatekeeperignore`** — Does a pattern match your file?
+2. **Rule globs** — If your rules have `globs:` frontmatter, only matching files are analyzed.
+3. **Built-in exclusions** — `node_modules`, `dist`, `build`, `vendor`, and other dependency/build directories are always skipped.
+4. **Cache** — If the file and rules haven't changed since the last run, results are cached. Clear it via the Source Control overflow menu → **Agentic Gatekeeper: Clear Analysis Cache**.
 
 ![Clear Cache Menu](images/5.png)
 </details>
@@ -187,9 +191,15 @@ Yes. Use directory-scoped rules (`*-gatekeeper.md`) and `globs:` frontmatter to 
 </details>
 
 <details>
-<summary><strong>How do I force a re-analysis on files that haven't changed?</strong></summary>
+<summary><strong>What happens when I update my rules?</strong></summary>
 
-Open the Source Control overflow menu → **Agentic Gatekeeper: Clear Analysis Cache**. The cache tracks both file content and rule versions, so it will also auto-invalidate when you update your rules.
+The cache automatically invalidates. It tracks both file content and rule versions, so any change to your Markdown rules triggers a fresh re-analysis on the next run — no manual cache clearing needed.
+</details>
+
+<details>
+<summary><strong>Can the AI accidentally destroy my file?</strong></summary>
+
+The Patcher has built-in safety checks. If the AI produces a rewrite that suspiciously reduces the file size (a sign of truncation or hallucination), the patch is **rejected** and your original file is preserved untouched.
 </details>
 
 ---
