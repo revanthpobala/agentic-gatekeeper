@@ -33,7 +33,34 @@ Teams invest heavily in documenting their engineering standards — architecture
 
 > Your rules can be **literally anything**: strict typing, component architecture, security guardrails, naming conventions, or formatting preferences. If you can write it in Markdown, the Gatekeeper can enforce it.
 
-### 🔍 Validate Rules — Audit Your Rules Before Enforcing
+---
+
+## 📐 Where to Put Your Rules
+
+![Markdown Local Rules vs Global Rules](images/2.png)
+
+| Scope | Location | Example |
+| :--- | :--- | :--- |
+| **Global** | `.gatekeeper/*.md`, `AGENTS.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md` | `.gatekeeper/security-rules.md` |
+| **Directory-scoped** | `*-instructions.md` or `*-gatekeeper.md` anywhere in the tree | `src/components/ui-gatekeeper.md` |
+| **Remote** | Synced from a GitHub repo into `.gatekeeper/remote/` | See Remote Rules below |
+
+![Configurable Rules Files Locations](images/4.png)
+
+### Targeting Specific Files (Rule Globs)
+Restrict any rule to specific files using YAML Frontmatter:
+
+```markdown
+---
+globs: "src/**/*.ts, src/**/*.tsx"
+---
+# TypeScript Architecture Rules
+1. Every function must have an explicit return type...
+```
+
+---
+
+## 🔍 Validate Rules — Audit Your Rules Before Enforcing
 
 Not sure if your rules are specific enough? Run **`Agentic Gatekeeper: Validate Rules`** from the Source Control overflow menu to generate a full **Rule Report**.
 
@@ -64,31 +91,6 @@ Rules are cached by SHA, stored in a Git-ignored `.gatekeeper/remote/` directory
 
 > [!TIP]
 > **Live example:** Check out [agentic-gatekeeper-rules](https://github.com/revanthpobala/agentic-gatekeeper-rules/tree/main) to see how to structure rule files with Glob targeting.
-
----
-
-## 📐 Where to Put Your Rules
-
-![Markdown Local Rules vs Global Rules](images/2.png)
-
-| Scope | Location | Example |
-| :--- | :--- | :--- |
-| **Global** | `.gatekeeper/*.md`, `AGENTS.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md` | `.gatekeeper/security-rules.md` |
-| **Directory-scoped** | `*-instructions.md` or `*-gatekeeper.md` anywhere in the tree | `src/components/ui-gatekeeper.md` |
-| **Remote** | Synced from a GitHub repo into `.gatekeeper/remote/` | See section above |
-
-![Configurable Rules Files Locations](images/4.png)
-
-### Targeting Specific Files (Rule Globs)
-Restrict any rule to specific files using YAML Frontmatter:
-
-```markdown
----
-globs: "src/**/*.ts, src/**/*.tsx"
----
-# TypeScript Architecture Rules
-1. Every function must have an explicit return type...
-```
 
 ---
 
