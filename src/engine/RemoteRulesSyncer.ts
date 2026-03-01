@@ -36,8 +36,11 @@ function buildProvenanceHeader(sourceUrl: string, sha: string, syncedAt: string)
     ].join('\n');
 }
 
-function fetchUrl(url: string): Promise<string> {
+function fetchUrl(url: string, redirectCount = 0): Promise<string> {
     return new Promise((resolve, reject) => {
+        if (redirectCount > 5) {
+            return reject(new Error(`Maximum redirect limit reached for ${url}`));
+        }
         if (!url.startsWith('https://')) {
             return reject(new Error(`Only HTTPS URLs are allowed. Got: ${url}`));
         }
@@ -46,7 +49,7 @@ function fetchUrl(url: string): Promise<string> {
                 const location = res.headers['location'];
                 // Guard: only follow redirects to HTTPS targets
                 if (location && location.startsWith('https://')) {
-                    return fetchUrl(location).then(resolve, reject);
+                    return fetchUrl(location, redirectCount + 1).then(resolve, reject);
                 }
                 return reject(new Error(`Redirect to non-HTTPS or missing location for ${url}`));
             }
@@ -99,9 +102,12 @@ async function fetchGitHubTree(
     return results;
 }
 
-function fetchWithOptionalAuth(url: string, token?: string, enterpriseUrl?: string): Promise<string> {
-    if (!token) { return fetchUrl(url); }
+function fetchWithOptionalAuth(url: string, token?: string, enterpriseUrl?: string, redirectCount = 0): Promise<string> {
+    if (!token) { return fetchUrl(url, redirectCount); }
     return new Promise((resolve, reject) => {
+        if (redirectCount > 5) {
+            return reject(new Error(`Maximum redirect limit reached for ${url}`));
+        }
         const u = new URL(url);
 
         // SECURITY: ONLY send the GitHub PAT to official GitHub domains or the user's Enterprise server.
@@ -135,7 +141,7 @@ function fetchWithOptionalAuth(url: string, token?: string, enterpriseUrl?: stri
                 if (!redirectUrl.startsWith('https:')) {
                     return reject(new Error(`Insecure redirect blocked: ${url} attempted to redirect to non-HTTPS URL ${redirectUrl}`));
                 }
-                return resolve(fetchWithOptionalAuth(redirectUrl, token, enterpriseUrl));
+                return resolve(fetchWithOptionalAuth(redirectUrl, token, enterpriseUrl, redirectCount + 1));
             } else if (res.statusCode !== 200) {
                 return reject(new Error(`HTTP ${res.statusCode} for ${url}`));
             }
