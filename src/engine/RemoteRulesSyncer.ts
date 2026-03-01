@@ -94,15 +94,23 @@ async function fetchGitHubTree(
         if (item.type !== 'blob') { continue; }
         if (!item.path.startsWith(normalizedFolder + '/')) { continue; }
         if (!item.path.endsWith('.md')) { continue; }
-        const rawUrl = enterpriseUrl
+        // If we are authenticated, we must use the REST API blob URL instead of raw.githubusercontent.com.
+        // GitHub Fine-grained PATs cannot access raw.githubusercontent.com and will return 404.
+        const downloadUrl = (token && item.url) ? item.url : (enterpriseUrl
             ? `${rawBase}/raw/${owner}/${repo}/${defaultBranch}/${item.path}`
-            : `${rawBase}/${owner}/${repo}/${defaultBranch}/${item.path}`;
-        results.push({ filePath: item.path, downloadUrl: rawUrl, blobSha: item.sha as string });
+            : `${rawBase}/${owner}/${repo}/${defaultBranch}/${item.path}`);
+        results.push({ filePath: item.path, downloadUrl, blobSha: item.sha as string });
     }
     return results;
 }
 
-function fetchWithOptionalAuth(url: string, token?: string, enterpriseUrl?: string, redirectCount = 0): Promise<string> {
+function fetchWithOptionalAuth(
+    url: string,
+    token?: string,
+    enterpriseUrl?: string,
+    redirectCount = 0,
+    acceptHeader = 'application/vnd.github+json'
+): Promise<string> {
     if (!token) { return fetchUrl(url, redirectCount); }
     return new Promise((resolve, reject) => {
         if (redirectCount > 5) {
@@ -125,9 +133,9 @@ function fetchWithOptionalAuth(url: string, token?: string, enterpriseUrl?: stri
         };
 
         if (isGitHubDomain) {
-            headers['Accept'] = 'application/vnd.github+json';
+            headers['Accept'] = acceptHeader;
             if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
+                headers['Authorization'] = `Bearer ${token.trim()}`;
             }
         }
 
@@ -141,7 +149,7 @@ function fetchWithOptionalAuth(url: string, token?: string, enterpriseUrl?: stri
                 if (!redirectUrl.startsWith('https:')) {
                     return reject(new Error(`Insecure redirect blocked: ${url} attempted to redirect to non-HTTPS URL ${redirectUrl}`));
                 }
-                return resolve(fetchWithOptionalAuth(redirectUrl, token, enterpriseUrl, redirectCount + 1));
+                return resolve(fetchWithOptionalAuth(redirectUrl, token, enterpriseUrl, redirectCount + 1, acceptHeader));
             } else if (res.statusCode !== 200) {
                 return reject(new Error(`HTTP ${res.statusCode} for ${url}`));
             }
@@ -309,7 +317,9 @@ export class RemoteRulesSyncer {
                     this.log(`   ✖ Blocked fetch from untrusted host: ${url}`);
                     continue;
                 }
-                const content = await fetchWithOptionalAuth(url, token, enterpriseUrl);
+                const isApiContent = url.includes('/git/blobs/') || url.includes('/contents/');
+                const accept = isApiContent ? 'application/vnd.github.v3.raw' : 'application/vnd.github+json';
+                const content = await fetchWithOptionalAuth(url, token, enterpriseUrl, 0, accept);
                 // Strip query string and hash before using as filename to avoid
                 // invalid characters on disk (e.g. "rules.md?token=abc")
                 const cleanPath = url.split('?')[0].split('#')[0];
@@ -341,7 +351,9 @@ export class RemoteRulesSyncer {
                                 this.log(`   ✖ Blocked raw file fetch from untrusted host: ${item.downloadUrl}`);
                                 continue;
                             }
-                            const fileContent = await fetchWithOptionalAuth(item.downloadUrl, token, enterpriseUrl);
+                            const isApiContent = item.downloadUrl.includes('/git/blobs/');
+                            const accept = isApiContent ? 'application/vnd.github.v3.raw' : 'application/vnd.github+json';
+                            const fileContent = await fetchWithOptionalAuth(item.downloadUrl, token, enterpriseUrl, 0, accept);
                             // Namespace the filename with its relative subfolder to prevent collisions
                             // e.g. "frontend/rules.md" → "frontend__rules.md" in .gatekeeper/
                             const normalizedFolder = folder.replace(/\/$/, '');
