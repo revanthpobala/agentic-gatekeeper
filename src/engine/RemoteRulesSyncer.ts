@@ -115,12 +115,14 @@ function fetchWithOptionalAuth(url: string, token?: string, enterpriseUrl?: stri
         }
 
         const headers: Record<string, string> = {
-            'User-Agent': 'Agentic-Gatekeeper',
-            'Accept': 'application/vnd.github+json'
+            'User-Agent': 'Agentic-Gatekeeper'
         };
 
-        if (isGitHubDomain && token) {
-            headers['Authorization'] = `Bearer ${token}`;
+        if (isGitHubDomain) {
+            headers['Accept'] = 'application/vnd.github+json';
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
         }
 
         https.get({
@@ -128,7 +130,10 @@ function fetchWithOptionalAuth(url: string, token?: string, enterpriseUrl?: stri
             path: u.pathname + u.search,
             headers: headers
         }, (res) => {
-            if (res.statusCode !== 200) {
+            if (res.statusCode && [301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
+                const redirectUrl = new URL(res.headers.location, url).toString();
+                return resolve(fetchWithOptionalAuth(redirectUrl, token, enterpriseUrl));
+            } else if (res.statusCode !== 200) {
                 return reject(new Error(`HTTP ${res.statusCode} for ${url}`));
             }
             const chunks: Buffer[] = [];
@@ -220,8 +225,11 @@ export class RemoteRulesSyncer {
             );
 
             if (answer === 'Yes, Allow') {
-                trustedHosts.push(host);
-                await this.workspaceState.update('trustedHosts', trustedHosts);
+                const latestTrusted = this.workspaceState.get<string[]>('trustedHosts') ?? [];
+                if (!latestTrusted.includes(host)) {
+                    latestTrusted.push(host);
+                    await this.workspaceState.update('trustedHosts', latestTrusted);
+                }
                 return true;
             } else if (answer === 'No, Block') {
                 vscode.window.showInformationMessage(`Agentic Gatekeeper: Blocked remote rules fetch from "${host}".`);
@@ -354,7 +362,10 @@ export class RemoteRulesSyncer {
         // SHA change detection — non-modal flow:
         // 1. Open the diff tab immediately so the user can inspect changes.
         // 2. Show a non-blocking toast with Accept/Keep buttons alongside the diff.
-        if (oldSha && oldSha !== newSha) {
+        if (oldSha && oldSha === newSha) {
+            this.log(`   ℹ Remote rules match local cache (SHA: ${oldSha}). Skipping disk write.`);
+            return meta?.entries ?? [];
+        } else if (oldSha && oldSha !== newSha) {
             // Open diff tab first — user can read while deciding
             await this.showDiffForFirstChange(fetched, now);
 
