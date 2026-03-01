@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { minimatch } from 'minimatch';
+import { RemoteRulesSyncer } from './RemoteRulesSyncer';
 
 // Directories that contain global rules (applied to all files)
 const GLOBAL_RULE_DIRS = ['.gatekeeper', '.cursor/rules', '.cursor', '.github', '.agents'];
@@ -9,9 +10,10 @@ const GLOBAL_RULE_DIRS = ['.gatekeeper', '.cursor/rules', '.cursor', '.github', 
 export class MarkdownParser {
     private workspaceRoot: string;
     private outputChannel: vscode.OutputChannel | undefined;
+    private remoteSync?: RemoteRulesSyncer;
 
     private static readonly DEFAULT_RULES_FILES = [
-        '.gatekeeper/*.md',
+        '.gatekeeper/**/*.md',
         '**/*-gatekeeper.md',
         '**/*-instructions.md',
         'agents.md',
@@ -20,9 +22,10 @@ export class MarkdownParser {
         'ARCHITECTURE.md'
     ];
 
-    constructor(workspaceRoot: string, outputChannel?: vscode.OutputChannel) {
+    constructor(workspaceRoot: string, outputChannel?: vscode.OutputChannel, remoteSync?: RemoteRulesSyncer) {
         this.workspaceRoot = workspaceRoot;
         this.outputChannel = outputChannel;
+        this.remoteSync = remoteSync;
     }
 
     private log(msg: string) {
@@ -126,7 +129,30 @@ export class MarkdownParser {
         }
 
         if (rulesContext.length === 0) {
-            this.log('  - No rule files detected.');
+            this.log('  - No local rule files detected.');
+
+            // Fallback: attempt remote sync if configured
+            if (this.remoteSync) {
+                this.log('  🌐 Attempting remote rule sync...');
+                try {
+                    const synced = await this.remoteSync.sync();
+                    for (const entry of synced) {
+                        try {
+                            const content = await fs.promises.readFile(entry.localPath, 'utf8');
+                            rulesContext.push({
+                                filename: entry.filename,
+                                content,
+                                type: 'global',
+                                globs: this.extractFrontmatterGlobs(content)
+                            });
+                        } catch {
+                            this.log(`  ! Failed to read synced rule: ${entry.localPath}`);
+                        }
+                    }
+                } catch (err: any) {
+                    this.log(`  ✖ Remote sync failed: ${err.message}`);
+                }
+            }
         }
 
         return rulesContext;

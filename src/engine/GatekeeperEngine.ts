@@ -10,6 +10,7 @@ import { ProviderResult, TokenUsage } from '../ai/IProvider';
 import { groupIntoBatches, estimateTokens } from './BatchProcessor';
 import * as crypto from 'crypto';
 import { minimatch } from 'minimatch';
+import { RemoteRulesSyncer } from './RemoteRulesSyncer';
 
 // Pricing per 1M tokens (input / output) in USD
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
@@ -43,11 +44,13 @@ export class GatekeeperEngine {
     private workspaceRoot: string;
     private outputChannel: vscode.OutputChannel;
     private workspaceState: vscode.Memento;
+    private remoteSync?: RemoteRulesSyncer;
 
-    constructor(workspaceRoot: string, outputChannel: vscode.OutputChannel, workspaceState: vscode.Memento) {
+    constructor(workspaceRoot: string, outputChannel: vscode.OutputChannel, workspaceState: vscode.Memento, remoteSync?: RemoteRulesSyncer) {
         this.workspaceRoot = workspaceRoot;
         this.outputChannel = outputChannel;
         this.workspaceState = workspaceState;
+        this.remoteSync = remoteSync;
     }
 
     private accumulateAudit(audit: RunAudit, result: ProviderResult) {
@@ -134,7 +137,7 @@ export class GatekeeperEngine {
                     return;
                 }
 
-                const markdownParser = new MarkdownParser(this.workspaceRoot, this.outputChannel);
+                const markdownParser = new MarkdownParser(this.workspaceRoot, this.outputChannel, this.remoteSync);
                 const patcher = new WorkspacePatcher(this.workspaceRoot, this.outputChannel);
                 const orchestrator = new AIAgent();
                 const config = vscode.workspace.getConfiguration('agenticGatekeeper');
@@ -195,6 +198,22 @@ export class GatekeeperEngine {
                 const skipPrefixes = ['.gatekeeper/', '.cursor/', '.github/', '.agents/'];
                 const skipExact = ['agents.md', 'AGENTS.md', 'CONTRIBUTING.md', 'ARCHITECTURE.md'];
 
+                // Directories to completely ignore anywhere in the path (e.g., dependencies, build outputs)
+                const skipDirectories = [
+                    // Node / Web
+                    'node_modules', 'dist', 'build', 'out', '.next', '.nuxt', '.svelte-kit', 'coverage',
+                    // Python
+                    'venv', '.venv', 'env', '.env', '__pycache__', '.pytest_cache', '.tox', 'eggs',
+                    // PHP / Go / Ruby
+                    'vendor',
+                    // Java / C# / Rust
+                    'target', 'bin', 'obj', '.gradle',
+                    // iOS / macOS
+                    'Pods', 'DerivedData',
+                    // IDEs
+                    '.idea', '.vs'
+                ];
+
                 // File extensions that are never useful to send to an LLM
                 const skipExtensions = [
                     '.lock', '.snap', '.map', '.min.js', '.min.css',
@@ -223,6 +242,7 @@ export class GatekeeperEngine {
                     );
 
                     let shouldSkip = skipPrefixes.some(p => relativePath.startsWith(p)) ||
+                        skipDirectories.some(d => relativePath.split(/[/\\]/).includes(d)) ||
                         skipExact.includes(relativePath) ||
                         relativePath.endsWith('-gatekeeper.md') ||
                         relativePath.endsWith('-instructions.md') ||

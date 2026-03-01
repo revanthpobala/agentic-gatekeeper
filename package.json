@@ -2,7 +2,7 @@
   "name": "agentic-gatekeeper",
   "displayName": "Agentic Gatekeeper",
   "description": "The industry's first Agentic Rule Enforcer. Automatically compare your Project Ruleset against staged changes and apply full-file patches using Claude, GPT, Qwen, and DeepSeek. Stop technical debt before it hits your branch.",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "publisher": "revanthpobala",
   "author": "Revanth Pobala",
   "license": "SEE LICENSE IN LICENSE.txt",
@@ -17,7 +17,7 @@
     "cursor",
     "windsurf",
     "claude-4",
-    "claude-4.5-sonnet",
+    "claude-4.6-sonnet",
     "claude-4.6-opus",
     "gemini-3",
     "gemini-3-pro",
@@ -25,7 +25,6 @@
     "gpt-5",
     "gpt-5.3-codex",
     "deepseek-v4",
-    "gemini-3",
     "grok-4",
     "llama-4",
     "markdown",
@@ -86,6 +85,28 @@
       {
         "command": "agentic-gatekeeper.clearCache",
         "title": "Agentic Gatekeeper: Clear Analysis Cache"
+      },
+      {
+        "command": "agentic-gatekeeper.syncRemoteRules",
+        "title": "Agentic Gatekeeper: Sync Remote Rules"
+      },
+      {
+        "command": "agentic-gatekeeper.setGitHubPat",
+        "title": "Agentic Gatekeeper: Set GitHub PAT (for Private Repos)"
+      },
+      {
+        "command": "agentic-gatekeeper.openRuleSource",
+        "title": "Open Source URL",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "agentic-gatekeeper.validateRules",
+        "title": "Agentic Gatekeeper: Validate Rules"
+      },
+      {
+        "command": "agentic-gatekeeper.refreshRemoteRules",
+        "title": "Refresh Remote Rules",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -99,6 +120,39 @@
           "command": "agentic-gatekeeper.clearCache",
           "when": "scmProvider == git",
           "group": "1_gatekeeper"
+        },
+        {
+          "command": "agentic-gatekeeper.syncRemoteRules",
+          "when": "scmProvider == git",
+          "group": "1_gatekeeper"
+        },
+        {
+          "command": "agentic-gatekeeper.validateRules",
+          "when": "scmProvider == git",
+          "group": "1_gatekeeper"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "agentic-gatekeeper.refreshRemoteRules",
+          "when": "view == agenticGatekeeper.remoteRules",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "agentic-gatekeeper.openRuleSource",
+          "when": "view == agenticGatekeeper.remoteRules && viewItem == remoteRuleEntry",
+          "group": "inline"
+        }
+      ]
+    },
+    "views": {
+      "scm": [
+        {
+          "id": "agenticGatekeeper.remoteRules",
+          "name": "Remote Rules",
+          "when": "scmProvider == git"
         }
       ]
     },
@@ -242,7 +296,7 @@
             "type": "string"
           },
           "default": [
-            ".gatekeeper/*.md",
+            ".gatekeeper/**/*.md",
             "**/*-gatekeeper.md",
             "**/*-instructions.md",
             "AGENTS.md",
@@ -258,14 +312,50 @@
           },
           "default": [],
           "description": "Glob patterns for files/directories to exclude from analysis (e.g., 'scripts/**', 'vendor/**', '*.test.go'). These are in addition to the built-in skip list."
+        },
+        "agenticGatekeeper.remoteRulesUrl": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "List of HTTPS raw URLs pointing to remote Markdown rule files to sync on demand (e.g., 'https://raw.githubusercontent.com/org/repo/main/.gatekeeper/rules.md'). Requires HTTPS."
+        },
+        "agenticGatekeeper.remoteRulesRepo": {
+          "type": "string",
+          "default": "",
+          "description": "GitHub repository and optional folder path to sync rules from (format: 'owner/repo' or 'owner/repo:path/to/folder'). Uses the GitHub API. Configure your token in the 'Agentic Gatekeeper: GitHub Pat' setting for private repos."
+        },
+        "agenticGatekeeper.remoteRulesTtlHours": {
+          "type": "number",
+          "default": 24,
+          "description": "How many hours to cache remote rules before re-fetching. Set to 0 to always re-fetch."
+        },
+        "agenticGatekeeper.remoteRulesEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable remote rule syncing entirely. Set to false to opt out. Can also be toggled via the 'Opt Out' button in the first-sync notification."
+        },
+        "agenticGatekeeper.githubPat": {
+          "type": "string",
+          "default": "",
+          "description": "GitHub Personal Access Token for syncing rules from private repositories. Paste your ghp_... token here.",
+          "editPresentation": "password"
+        },
+        "agenticGatekeeper.githubEnterpriseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Optional: Full base URL to your GitHub Enterprise Server (e.g., 'https://github.mycompany.com'). Leave blank for public GitHub.com."
         }
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && node esbuild.js",
+    "check-types": "tsc --noEmit",
+    "watch": "node esbuild.js --watch",
+    "package": "npm run check-types && node esbuild.js --production",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test"
@@ -277,6 +367,7 @@
     "@types/vscode": "^1.90.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.27.3",
     "eslint": "^9.39.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.54.0"
