@@ -130,10 +130,39 @@ By default, the Gatekeeper uses your **Native IDE Model** (Copilot/Gemini). For 
 1. Open the Command Palette → **`Agentic Gatekeeper: Configure API Key`**
 2. Choose your provider and paste your key.
 
-### Caching
-Clear the cache via the Source Control overflow menu when you need a forced re-analysis:
+### FAQ
+
+<details>
+<summary><strong>Does this send my code to an external server?</strong></summary>
+
+Only if you configure an external AI provider (Anthropic, OpenAI, etc.). The default **Native IDE** mode routes through your existing Copilot or Gemini session. Selecting **Custom (Ollama/Local)** keeps everything fully offline on your machine.
+</details>
+
+<details>
+<summary><strong>Why did the Gatekeeper skip my file?</strong></summary>
+
+Check three things: (1) your `.gatekeeperignore` patterns, (2) the `globs:` frontmatter in your rule files, and (3) the analysis cache. To force a re-analysis, open the Source Control overflow menu and select **Agentic Gatekeeper: Clear Analysis Cache**.
 
 ![Clear Cache Menu](images/5.png)
+</details>
+
+<details>
+<summary><strong>Can I use this without GitHub Copilot?</strong></summary>
+
+Yes. Configure any supported provider — Anthropic, OpenAI, Google Gemini, OpenRouter, or a fully local model via Ollama or LM Studio. Copilot is just the zero-config default.
+</details>
+
+<details>
+<summary><strong>Does it work with monorepos?</strong></summary>
+
+Yes. Use directory-scoped rules (`*-gatekeeper.md`) and `globs:` frontmatter to target specific packages or directories within your monorepo.
+</details>
+
+<details>
+<summary><strong>How do I force a re-analysis on files that haven't changed?</strong></summary>
+
+Open the Source Control overflow menu → **Agentic Gatekeeper: Clear Analysis Cache**. The cache tracks both file content and rule versions, so it will also auto-invalidate when you update your rules.
+</details>
 
 ### Supported Providers
 
