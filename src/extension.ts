@@ -15,6 +15,26 @@ export function activate(context: vscode.ExtensionContext) {
 		console.log('Agentic Gatekeeper is now active.');
 		outputChannel.appendLine('Agentic Gatekeeper extension activated.');
 
+		// --- Auto-migrate legacy rulesFiles glob for existing users ---
+		const config = vscode.workspace.getConfiguration('agenticGatekeeper');
+		const globInspection = config.inspect<string[]>('rulesFiles');
+
+		if (globInspection?.globalValue) {
+			const migrated = globInspection.globalValue.map(rf => rf === '.gatekeeper/*.md' ? '.gatekeeper/**/*.md' : rf);
+			if (JSON.stringify(globInspection.globalValue) !== JSON.stringify(migrated)) {
+				config.update('rulesFiles', migrated, vscode.ConfigurationTarget.Global);
+				outputChannel.appendLine('Migrated global agenticGatekeeper.rulesFiles to support recursive subdirectories.');
+			}
+		}
+
+		if (globInspection?.workspaceValue) {
+			const migrated = globInspection.workspaceValue.map(rf => rf === '.gatekeeper/*.md' ? '.gatekeeper/**/*.md' : rf);
+			if (JSON.stringify(globInspection.workspaceValue) !== JSON.stringify(migrated)) {
+				config.update('rulesFiles', migrated, vscode.ConfigurationTarget.Workspace);
+				outputChannel.appendLine('Migrated workspace agenticGatekeeper.rulesFiles to support recursive subdirectories.');
+			}
+		}
+
 		// --- Remote Rules Syncer + TreeView ---
 		const syncer = new RemoteRulesSyncer(
 			vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '',

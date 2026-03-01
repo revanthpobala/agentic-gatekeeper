@@ -391,8 +391,21 @@ export class RemoteRulesSyncer {
         // SHA change detection — non-modal flow:
         // 1. Open the diff tab immediately so the user can inspect changes.
         // 2. Show a non-blocking toast with Accept/Keep buttons alongside the diff.
-        if (oldSha && oldSha === newSha) {
-            this.log(`   ℹ Remote rules match local cache (SHA: ${oldSha}). Skipping disk write.`);
+
+        let allFilesExist = true;
+        if (meta?.entries && meta.entries.length > 0) {
+            for (const entry of meta.entries) {
+                if (!fs.existsSync(entry.localPath)) {
+                    allFilesExist = false;
+                    break;
+                }
+            }
+        } else {
+            allFilesExist = false;
+        }
+
+        if (oldSha && oldSha === newSha && allFilesExist) {
+            this.log(`   ℹ Remote rules match local cache (SHA: ${oldSha}) and exist on disk. Skipping write.`);
             return meta?.entries ?? [];
         } else if (oldSha && oldSha !== newSha) {
             // Open diff tab first — user can read while deciding
