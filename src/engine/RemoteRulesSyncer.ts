@@ -340,11 +340,12 @@ export class RemoteRulesSyncer {
 
         // Approach 2: GitHub API tree sync
         if (repoSetting) {
-            const match = repoSetting.match(/^([^/]+)\/([^:]+):(.+)$/);
+            const match = repoSetting.match(/^([^/]+)\/([^:]+)(?::(.+))?$/);
             if (!match) {
-                this.log(`   ✖ Invalid remoteRulesRepo format. Expected "owner/repo:path/to/folder".`);
+                this.log(`   ✖ Invalid remoteRulesRepo format. Expected "owner/repo" or "owner/repo:path/to/folder".`);
             } else {
-                const [, owner, repo, folder] = match;
+                const [, owner, repo, folderStr] = match;
+                const folder = folderStr || '';
                 try {
                     // Check trust for API endpoint (especially if enterpriseUrl is customized)
                     const apiBase = enterpriseUrl ? `${enterpriseUrl.replace(/\/$/, '')}/api/v3` : 'https://api.github.com';
