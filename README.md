@@ -64,7 +64,7 @@ globs: "src/**/*.ts, src/**/*.tsx"
 
 Not sure if your rules are specific enough? Run **`Agentic Gatekeeper: Validate Rules`** from the Source Control overflow menu to generate a full **Rule Report**.
 
-![Validate Rules Report](images/validate-rules.png)
+![Validate Rules Report](images/validate_rules_demo.png)
 
 The Gatekeeper sends each rule to the AI for a semantic audit and returns:
 - **Enforceability Rating** — `YES`, `PARTIALLY`, or `NO` based on how measurable and specific the rule is.
@@ -170,9 +170,9 @@ Only if you configure an external AI provider (Anthropic, OpenAI, etc.). The def
 <summary><strong>Why did the Gatekeeper skip or ignore my file?</strong></summary>
 
 Check these in order:
-1. **`.gatekeeperignore`** — Does a pattern match your file?
+1. **`.gatekeeperignore`** — Works exactly like `.gitignore`. Drop this file in your workspace root to exclude specific paths from AI analysis. 
 2. **Rule globs** — If your rules have `globs:` frontmatter, only matching files are analyzed.
-3. **Built-in exclusions** — `node_modules`, `dist`, `build`, `vendor`, and other dependency/build directories are always skipped.
+3. **Built-in exclusions** — `node_modules`, `dist`, `build`, `vendor`, `.next`, `venv`, and other standard dependency/build directories are automatically skipped out of the box so you rarely need a custom ignore file.
 4. **Cache** — If the file and rules haven't changed since the last run, results are cached. Clear it via the Source Control overflow menu → **Agentic Gatekeeper: Clear Analysis Cache**.
 
 ![Clear Cache Menu](images/5.png)
